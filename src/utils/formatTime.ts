@@ -41,6 +41,28 @@ export function formatGapMs(ms: number | null | undefined): string {
   return `+${minutes}:${secs2(seconds)}`
 }
 
+// Mass-start (criterium / road) elapsed time: whole seconds, hours kept.
+// 9546000 -> "2:39:06"; 2027000 -> "33:47".
+export function formatDurationWhole(ms: number | null | undefined): string {
+  if (ms == null || !Number.isFinite(ms)) return '—'
+  const total = Math.round(ms / 1000)
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const seconds = total % 60
+  if (hours > 0) return `${hours}:${pad2(minutes)}:${pad2(seconds)}`
+  return `${minutes}:${pad2(seconds)}`
+}
+
+// Mass-start gap to the leader: whole seconds. 0 -> "+0:00"; 115000 -> "+1:55".
+export function formatGapWhole(ms: number | null | undefined): string {
+  if (ms == null || !Number.isFinite(ms)) return '—'
+  if (ms <= 0) return '+0:00'
+  const total = Math.round(ms / 1000)
+  const minutes = Math.floor(total / 60)
+  const seconds = total % 60
+  return `+${minutes}:${pad2(seconds)}`
+}
+
 // Local wall-clock time (HH:MM:SS) from an ISO string, for "last update" and feed lines.
 export function formatClock(iso: string | null | undefined): string {
   if (!iso) return '--:--:--'

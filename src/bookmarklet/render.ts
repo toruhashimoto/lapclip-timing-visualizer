@@ -2,10 +2,21 @@
 // overlay as plain DOM so the bundle stays tiny and can run with zero deps,
 // inline or via a one-line loader. Reuses the framework-agnostic parser +
 // time/gap logic; only the rendering is reimplemented without React.
-import type { LapClipData, TeamData } from '../types'
-import { formatTimeMs, formatGapMs } from '../utils/formatTime'
-import { gapBandForRider, classifyGap } from '../utils/classifyGap'
+import type { LapClipData, RiderResult, TeamData } from '../types'
+import {
+  formatTimeMs,
+  formatGapMs,
+  formatDurationWhole,
+  formatGapWhole,
+} from '../utils/formatTime'
+import {
+  gapBandForRider,
+  classifyGap,
+  classifyMassStartGap,
+} from '../utils/classifyGap'
 import { lapSplits, perLapBest } from '../utils/normalizeTeams'
+import { clusterGroups, lappedRiders } from '../utils/groupRiders'
+import { leaderLap } from '../utils/normalizeMassStart'
 
 // Gap-band key -> concrete colour (the shared bands use Tailwind class names,
 // which don't exist in our isolated Shadow DOM, so we map to hex here).
@@ -44,7 +55,21 @@ td { padding: 6px 8px; border-bottom: 1px solid #1f1f23; white-space: nowrap; }
 .fill { height: 8px; border-radius: 9999px; min-width: 2px; }
 .empty { padding: 48px 16px; text-align: center; color: #71717a; font-size: 13px; }
 .best { color: #c084fc; font-weight: 600; }
+.sit { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 10px; border-bottom: 1px solid #27272a; background: #111114; }
+.sitlap { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-weight: 700; font-size: 11px; color: #fdba74; border: 1px solid rgba(194,65,12,.6); background: rgba(67,20,7,.4); border-radius: 6px; padding: 2px 8px; }
+.sitchip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: #d4d4d8; }
+.sitchip.dim { color: #a1a1aa; }
+.dot { width: 8px; height: 8px; border-radius: 9999px; display: inline-block; }
+.lapped { color: #fb923c; font-weight: 600; }
 `
+
+// Group-kind dot colours for the situation line.
+const GKIND: Record<string, string> = {
+  break: '#fbbf24',
+  peloton: '#38bdf8',
+  chase: '#d4d4d8',
+  behind: '#71717a',
+}
 
 export function h(
   tag: string,
@@ -109,6 +134,106 @@ export function renderIndividual(data: LapClipData): HTMLElement {
   }
   const table = h('table', {}, h('thead', {}, head), body)
   return h('div', { class: 'scroll' }, table)
+}
+
+// Compact live race-situation line: lap counter + on-road groups + lapped count.
+function renderSituation(data: LapClipData): HTMLElement {
+  const groups = clusterGroups(data.riders)
+  const lapped = lappedRiders(data.riders)
+  const lap = leaderLap(data.riders, data.lapsTotal ?? null)
+  const total = data.lapsTotal ?? null
+  const remaining = total != null && lap != null ? total - lap : null
+  const lapLabel =
+    remaining != null && remaining > 0
+      ? `残り ${remaining}周`
+      : remaining === 0
+        ? 'ゴール'
+        : lap != null
+          ? `LAP ${lap}${total != null ? `/${total}` : ''}`
+          : 'LAP —'
+
+  const row = h('div', { class: 'sit' }, h('span', { class: 'sitlap' }, lapLabel))
+  for (const g of groups) {
+    const gap = g.frontGapMs > 0 ? ` ${formatGapWhole(g.frontGapMs)}` : ''
+    row.append(
+      h(
+        'span',
+        { class: 'sitchip' },
+        h('span', { class: 'dot', style: `background:${GKIND[g.kind]}` }),
+        `${g.label} ${g.size}${gap}`,
+      ),
+    )
+  }
+  if (lapped.length)
+    row.append(h('span', { class: 'sitchip dim' }, `遅れ ${lapped.length}`))
+  return row
+}
+
+function progressText(r: RiderResult): string {
+  const sp =
+    r.lastCheckpoint && r.lastCheckpoint !== 'FINISH' ? ` ${r.lastCheckpoint}` : ''
+  if (r.lapsDone != null && r.lapsTotal != null) return `${r.lapsDone}/${r.lapsTotal}${sp}`
+  if (r.lapsDone != null) return `${r.lapsDone}周${sp}`
+  if (r.isFinisher) return 'FIN'
+  return '—'
+}
+
+export function renderMassStart(data: LapClipData): HTMLElement {
+  const riders = data.riders
+  if (!riders.length)
+    return h('div', { class: 'empty' }, 'この公式ページから読み取れる結果がまだありません。')
+
+  let maxGap = 0
+  for (const r of riders)
+    if (r.lapsDown == null && r.gapMs != null && r.gapMs > maxGap) maxGap = r.gapMs
+  const scale = Math.min(300000, Math.max(5000, maxGap))
+
+  const head = h(
+    'tr',
+    {},
+    h('th', { class: 'rank' }, 'P'),
+    h('th', {}, 'No'),
+    h('th', {}, 'Team'),
+    h('th', {}, 'Rider'),
+    h('th', { class: 'r' }, '周回'),
+    h('th', { class: 'r' }, 'Time'),
+    h('th', { class: 'r' }, 'Gap'),
+    h('th', { class: 'barcell' }, ''),
+  )
+  const body = h('tbody')
+  for (const r of riders) {
+    const lapped = r.lapsDown != null && r.lapsDown > 0
+    const band = classifyMassStartGap(r.gapMs, r.lapsDown)
+    const gapCell = lapped
+      ? h('td', { class: 'r mono lapped' }, `-${r.lapsDown}周`)
+      : h(
+          'td',
+          { class: 'r mono', style: `color:${COLOR[band.key]}` },
+          r.gapMs != null ? (r.gapMs <= 0 ? '+0:00' : formatGapWhole(r.gapMs)) : '–',
+        )
+    body.append(
+      h(
+        'tr',
+        {},
+        h('td', { class: 'rank' }, r.rank != null ? String(r.rank) : '–'),
+        h('td', { class: 'mono' }, r.bib),
+        h('td', { class: 'team' }, r.teamCode ?? ''),
+        h('td', { class: 'name' }, r.name),
+        h('td', { class: 'r mono' }, progressText(r)),
+        h('td', { class: 'r mono' }, formatDurationWhole(r.elapsedMs)),
+        gapCell,
+        h(
+          'td',
+          { class: 'barcell' },
+          lapped
+            ? h('div', { class: 'track' })
+            : gapBar(r.gapMs, scale, COLOR[band.key]),
+        ),
+      ),
+    )
+  }
+  const table = h('table', {}, h('thead', {}, head), body)
+  return h('div', { class: 'scroll' }, renderSituation(data), table)
 }
 
 export function renderTeam(data: TeamData): HTMLElement {

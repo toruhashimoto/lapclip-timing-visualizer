@@ -76,6 +76,21 @@ export function gapBandForRider(r: RiderResult): GapBand {
   return classifyGap(r.gapMs)
 }
 
+// Mass-start (criterium / road) gaps span seconds to many minutes, and lapped
+// riders ("-N周") get the off-pace band. Used for the mass-start tower / bars.
+export function classifyMassStartGap(
+  gapMs: number | null | undefined,
+  lapsDown?: number | null,
+): GapBand {
+  if (lapsDown != null && lapsDown > 0) return BANDS.offpace
+  if (gapMs == null || !Number.isFinite(gapMs)) return BANDS.none
+  if (gapMs <= 1000) return BANDS.best // same bunch / lead group
+  if (gapMs <= 30000) return BANDS.close // within ~30s
+  if (gapMs <= 120000) return BANDS.contender // within ~2 min
+  if (gapMs <= 300000) return BANDS.losing // within ~5 min
+  return BANDS.offpace
+}
+
 // Ordered list for rendering the colour legend.
 export const GAP_BAND_ORDER: GapBandKey[] = [
   'best',

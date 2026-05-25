@@ -7,6 +7,7 @@
 // `.nw` spans (phase / time / gap).
 import type {
   LapClipData,
+  RaceShape,
   RiderResult,
   RiderStatus,
   TeamData,
@@ -15,6 +16,7 @@ import type {
 import { parseTimeToMs } from '../utils/parseTime'
 
 export type RawEntry = {
+  rankText: string // the official placing as shown, e.g. "12位"
   bib: string
   teamCode: string | null
   name: string
@@ -114,6 +116,7 @@ export function parseEntries(root: ParentNode = document): RawEntry[] {
     const name = (tnm ? tnm[2] : teamNameRaw).trim()
     if (!name) continue
 
+    const rankText = (nwb[0] ?? '').trim()
     const phase = (nw[0] ?? '').trim()
     const timeText = (nw[1] ?? '').trim()
     const gapText = (nw[2] ?? '').replace(/.*Top\s*[:：]\s*/, '').trim() || null
@@ -121,7 +124,7 @@ export function parseEntries(root: ParentNode = document): RawEntry[] {
     const key = `${bib}-${teamCode ?? ''}-${name}`
     if (seen.has(key)) continue
     seen.add(key)
-    entries.push({ bib, teamCode, name, phase, timeText, gapText })
+    entries.push({ rankText, bib, teamCode, name, phase, timeText, gapText })
   }
   return entries
 }
@@ -176,6 +179,7 @@ export function parseIndividual(root: ParentNode = document): LapClipData {
     sourceUrl: location.href,
     fetchedAt: new Date().toISOString(),
     riders,
+    raceShape: 'individual_tt',
   }
 }
 
@@ -213,6 +217,113 @@ export function parseTeam(root: ParentNode = document, laps = 3): TeamData {
   }
 }
 
+// "12位" -> 12. The mass-start ranking trusts this official placing.
+export function parseRankNum(rankText: string): number | null {
+  const m = rankText.match(/(\d+)/)
+  return m ? Number(m[1]) : null
+}
+
+// Parse a mass-start phase label into lap progress + last checkpoint:
+//   "FINISH"     -> { done: null, total: null, checkpoint: 'FINISH' }
+//   "10周"       -> { done: 10,   total: null }            (criterium: lap count)
+//   "4/6周 SP2"  -> { done: 4,    total: 6, checkpoint: 'SP2' }
+//   "3/6周"      -> { done: 3,    total: 6 }
+export function parseLapPhase(phase: string): {
+  lapsDone: number | null
+  lapsTotal: number | null
+  lastCheckpoint: string | null
+} {
+  const frac = phase.match(/(\d+)\s*\/\s*(\d+)\s*周/)
+  const single = phase.match(/(\d+)\s*周/)
+  const lapsDone = frac ? Number(frac[1]) : single ? Number(single[1]) : null
+  const lapsTotal = frac ? Number(frac[2]) : null
+  // Anything after the 周 token (e.g. "SP2", "KOM") is the last point passed.
+  const tail = phase.replace(/.*周/, '').trim()
+  const ckMatch = phase.match(/\b(SP\d+|KOM|FINISH)\b/i)
+  const lastCheckpoint = ckMatch
+    ? ckMatch[1].toUpperCase()
+    : tail && !/^\d+$/.test(tail)
+      ? tail
+      : null
+  return { lapsDone, lapsTotal, lastCheckpoint }
+}
+
+// Laps down parsed from a gap like "-4周" / "+1周". Returns null for a time gap.
+export function parseLapsDown(gapText: string | null): number | null {
+  if (!gapText || !gapText.includes('周')) return null
+  const m = gapText.match(/(\d+)\s*周/)
+  return m ? Number(m[1]) : null
+}
+
+// Mass-start (criterium / road): one rider per row, ranked by the official
+// placing (位) because bunch finishes share the same time. The phase shows lap
+// progress (N周 / X/Y周 / +SPn), the gap is a time for lead-lap riders and
+// "-N周" for lapped riders.
+export function parseMassStart(root: ParentNode = document): LapClipData {
+  const { eventName, categoryName } = eventInfo(root)
+  const entries = parseEntries(root)
+  let lapsTotal: number | null = null
+
+  const riders: RiderResult[] = entries.map((e) => {
+    const elapsedMs = parseTimeToMs(e.timeText)
+    // Pre-start / not-yet-timed rows show "0周 / -:--:-- / +Top : 0:00".
+    const noTime = elapsedMs == null
+    const { lapsDone, lapsTotal: total, lastCheckpoint } = parseLapPhase(e.phase)
+    if (total != null) lapsTotal = Math.max(lapsTotal ?? 0, total)
+    const officialRank = parseRankNum(e.rankText)
+    const lapsDown = parseLapsDown(e.gapText)
+    const onLeadLap = lapsDown == null
+    // A gap only counts once the rider has a real time on the clock; before the
+    // start every rider shows a placeholder "0:00" that must not group them.
+    const gapMs = onLeadLap && !noTime ? parseTimeToMs(e.gapText) : null
+
+    const phaseUp = e.phase.toUpperCase()
+    // Finished only when the source literally says FINISH — road races flip each
+    // row to FINISH as the rider crosses. A criterium keeps showing the lap
+    // count even at the end, so it never reports a finisher (source limitation).
+    const isFinisher = phaseUp === 'FINISH'
+
+    let status: RiderStatus
+    if (/^(DNS|DNF|DNQ|DSQ)$/.test(phaseUp)) status = phaseUp as RiderStatus
+    else if (isFinisher) status = 'FINISH'
+    else if (noTime) status = 'WAIT'
+    else status = 'RUNNING'
+
+    return {
+      rank: null,
+      bib: e.bib,
+      teamCode: e.teamCode,
+      name: e.name,
+      status,
+      intermediateText: null,
+      intermediateMs: null,
+      // Reuse finishMs so the diff/feed/highlight logic sees finishers too.
+      finishText: isFinisher ? e.timeText : null,
+      finishMs: isFinisher ? elapsedMs : null,
+      gapText: e.gapText,
+      gapMs,
+      officialRank,
+      elapsedText: e.timeText || null,
+      elapsedMs,
+      lapsDone,
+      lapsTotal: total,
+      lastCheckpoint,
+      lapsDown,
+      isFinisher,
+    }
+  })
+
+  return {
+    eventName,
+    categoryName,
+    sourceUrl: location.href,
+    fetchedAt: new Date().toISOString(),
+    riders,
+    raceShape: 'mass_start',
+    lapsTotal,
+  }
+}
+
 // Pick mode from the result.php category (ctg=004 = 大鹿 team TT). The caller can
 // override; this is just the default heuristic.
 export function detectMode(href = location.href): 'individual' | 'team' {
@@ -222,4 +333,41 @@ export function detectMode(href = location.href): 'individual' | 'team' {
   } catch {
     return 'individual'
   }
+}
+
+// Detect the race shape from the page CONTENT (not just the URL), so the right
+// view is chosen for any TOJ stage — and future events — without a hard-coded
+// category map. ctg=004 (大鹿 team TT) is the one URL hint we keep, because a
+// team page is otherwise hard to tell from an individual one by content alone.
+//
+// Signals (in priority order):
+//   • 1/100s times or a 中間点 phase  -> individual_tt (TTs are always sub-second).
+//   • lap-progress phases (N周 / X/Y周) -> mass_start.
+//   • whole-second times that tie across riders (bunch finish) -> mass_start.
+//   • nothing parseable yet            -> individual_tt (safe default; re-runs
+//                                         once the page populates).
+export function detectRaceShape(
+  root: ParentNode = document,
+  href = location.href,
+): RaceShape {
+  if (detectMode(href) === 'team') return 'team_tt'
+  const entries = parseEntries(root)
+  if (entries.length === 0) return 'individual_tt'
+
+  const hasCentiseconds = entries.some((e) => /\d\.\d{2}\b/.test(e.timeText))
+  const hasMidpoint = entries.some((e) => e.phase.includes('中間'))
+  if (hasCentiseconds || hasMidpoint) return 'individual_tt'
+
+  const hasLapPhase = entries.some((e) => /\d\s*周/.test(e.phase))
+  if (hasLapPhase) return 'mass_start'
+
+  // All-FINISH whole-second times: a bunch finish (shared times) is mass-start;
+  // unique times would be an unusual TT timed only to the second.
+  const times = entries
+    .map((e) => parseTimeToMs(e.timeText))
+    .filter((t): t is number => t != null)
+  const unique = new Set(times).size
+  if (times.length >= 3 && unique < times.length) return 'mass_start'
+
+  return 'individual_tt'
 }

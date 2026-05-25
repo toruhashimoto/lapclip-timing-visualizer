@@ -1,4 +1,4 @@
-import type { CacheStatus, Mode, Settings } from '../types'
+import type { CacheStatus, Mode, RaceShape, Settings } from '../types'
 import { formatClock } from '../utils/formatTime'
 
 type Props = {
@@ -18,9 +18,55 @@ type Props = {
   lockMode?: boolean
   modeOptions?: Mode[]
   cacheStatus?: CacheStatus | null
+  // Detected race shape + mass-start lap progress (for the badge / lap counter).
+  raceShape?: RaceShape
+  lapsTotal?: number | null
+  lapsLeader?: number | null
 }
 
 const INTERVALS = [15, 30, 60, 120]
+
+const SHAPE_BADGE: Record<RaceShape, { label: string; cls: string }> = {
+  individual_tt: {
+    label: '個人TT',
+    cls: 'bg-cyan-500/20 text-cyan-300',
+  },
+  mass_start: {
+    label: 'ロード/クリテ',
+    cls: 'bg-orange-500/20 text-orange-300',
+  },
+  team_tt: {
+    label: 'チームTT',
+    cls: 'bg-violet-500/20 text-violet-300',
+  },
+}
+
+function ShapeBadge({ shape }: { shape: RaceShape }) {
+  const b = SHAPE_BADGE[shape]
+  return (
+    <span
+      className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${b.cls}`}
+    >
+      {b.label}
+    </span>
+  )
+}
+
+function LapCounter({
+  leader,
+  total,
+}: {
+  leader: number | null | undefined
+  total: number | null | undefined
+}) {
+  if (leader == null) return null
+  return (
+    <span className="rounded-md border border-orange-700/60 bg-orange-950/40 px-2 py-1 font-mono text-[11px] font-bold tabular-nums text-orange-200">
+      LAP {leader}
+      {total != null ? `/${total}` : ''}
+    </span>
+  )
+}
 
 function ModeToggle({
   mode,
@@ -72,6 +118,9 @@ export function Header({
   lockMode,
   modeOptions,
   cacheStatus,
+  raceShape,
+  lapsTotal,
+  lapsLeader,
 }: Props) {
   return (
     <header className="sticky top-0 z-20 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur">
@@ -81,6 +130,7 @@ export function Header({
             <h1 className="text-sm font-bold uppercase tracking-[0.2em] text-zinc-100">
               LapClip Timing Visualizer
             </h1>
+            {raceShape && <ShapeBadge shape={raceShape} />}
             {sharedMode && (
               <span className="rounded bg-purple-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-purple-300">
                 Private viewing
@@ -108,6 +158,10 @@ export function Header({
         <div className="flex flex-wrap items-center gap-2 text-xs">
           {!lockMode && (
             <ModeToggle mode={mode} onChange={onModeChange} options={modeOptions} />
+          )}
+
+          {raceShape === 'mass_start' && (
+            <LapCounter leader={lapsLeader} total={lapsTotal} />
           )}
 
           <span className="font-mono text-zinc-400">

@@ -9,3 +9,4 @@ logs/
 cf_token.txt
 app_secret.txt
 tmp_*.html
+.analysis/

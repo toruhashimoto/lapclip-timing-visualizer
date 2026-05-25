@@ -7,17 +7,35 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react'
-import type { LapClipData, Mode, Settings, TeamData } from '../types'
+import type { LapClipData, Mode, RaceShape, Settings, TeamData } from '../types'
 import { normalizeRiders } from '../utils/normalizeRiders'
+import { leaderLap, normalizeMassStart } from '../utils/normalizeMassStart'
 import { normalizeTeams } from '../utils/normalizeTeams'
 import { diffData } from '../utils/diff'
 import { diffTeams } from '../utils/diffTeams'
 import { Header } from '../components/Header'
 import { TimingTower } from '../components/TimingTower'
+import { MassStartTower } from '../components/MassStartTower'
+import { RaceSituation } from '../components/RaceSituation'
 import { TeamTower } from '../components/TeamTower'
-import { parseIndividual, parseTeam, detectMode } from './parseDom'
+import {
+  detectRaceShape,
+  parseIndividual,
+  parseMassStart,
+  parseTeam,
+} from './parseDom'
 
 type ModeSetting = Mode | 'auto'
+
+// Resolve the race shape from the user's toggle + the page content.
+//   'auto'       -> fully content-detected (incl. the ctg=004 team hint).
+//   'individual' -> honour the choice but still auto-pick TT vs mass-start.
+//   'team'       -> force the team-TT view.
+function resolveShape(setting: ModeSetting): RaceShape {
+  if (setting === 'team') return 'team_tt'
+  if (setting === 'individual') return detectRaceShape(document, 'about:blank')
+  return detectRaceShape()
+}
 
 const LS = {
   mode: 'lapclip_us_mode_v1',
@@ -52,6 +70,15 @@ function ingestIndividual(
   const { riders } = diffData(normalized, prev)
   return { ...normalized, riders }
 }
+// Mass-start equivalent: rank by official place, then diff for flash flags.
+function ingestMass(raw: LapClipData, prev: LapClipData | null): LapClipData {
+  const normalized: LapClipData = {
+    ...raw,
+    riders: normalizeMassStart(raw.riders),
+  }
+  const { riders } = diffData(normalized, prev)
+  return { ...normalized, riders }
+}
 function ingestTeam(raw: TeamData, prev: TeamData | null): TeamData {
   const normalized: TeamData = { ...raw, teams: normalizeTeams(raw.teams) }
   const { teams } = diffTeams(normalized, prev)
@@ -64,8 +91,15 @@ export function Overlay({ onHide }: { onHide: () => void }) {
   const [modeSetting, setModeSetting] = useState<ModeSetting>(() =>
     loadLS<ModeSetting>(LS.mode, 'auto'),
   )
-  const resolvedMode: Mode = modeSetting === 'auto' ? detectMode() : modeSetting
-  const teamMode = resolvedMode === 'team'
+  // The detected race shape drives which tower renders. It is recomputed on each
+  // reparse (the page content may change as a race starts / finishes).
+  const [shape, setShape] = useState<RaceShape>(() =>
+    resolveShape(loadLS<ModeSetting>(LS.mode, 'auto')),
+  )
+  const teamMode = shape === 'team_tt'
+  const massStart = shape === 'mass_start'
+  // The header toggle only offers 個人 / チーム; map the shape onto it.
+  const toggleMode: Mode = teamMode ? 'team' : 'individual'
 
   const [data, setData] = useState<LapClipData | null>(null)
   const [teamData, setTeamData] = useState<TeamData | null>(null)
@@ -94,18 +128,35 @@ export function Overlay({ onHide }: { onHide: () => void }) {
 
   const reparse = useCallback(() => {
     try {
-      const ind = ingestIndividual(parseIndividual(), dataRef.current)
-      dataRef.current = ind
-      setData(ind)
-      const tm = ingestTeam(parseTeam(), teamRef.current)
-      teamRef.current = tm
-      setTeamData(tm)
+      const s = resolveShape(modeSetting)
+      setShape(s)
+      if (s === 'team_tt') {
+        const tm = ingestTeam(parseTeam(), teamRef.current)
+        teamRef.current = tm
+        setTeamData(tm)
+      } else if (s === 'mass_start') {
+        const ms = ingestMass(parseMassStart(), dataRef.current)
+        dataRef.current = ms
+        setData(ms)
+      } else {
+        const ind = ingestIndividual(parseIndividual(), dataRef.current)
+        dataRef.current = ind
+        setData(ind)
+      }
     } catch (e) {
       // Never break the original page if parsing fails.
       console.warn('[LapClip Visualizer] parse failed; original page intact', e)
     } finally {
       setParsedOnce(true)
     }
+  }, [modeSetting])
+
+  // Switching the toggle resets the diff baseline so the new view doesn't flash
+  // every row as "changed".
+  const handleModeChange = useCallback((m: Mode) => {
+    dataRef.current = null
+    teamRef.current = null
+    setModeSetting(m)
   }, [])
 
   // Initial parse + re-parse when the official page updates its results in place.
@@ -148,6 +199,11 @@ export function Overlay({ onHide }: { onHide: () => void }) {
       if (t.gapMs != null && t.gapMs > max) max = t.gapMs
     return Math.min(60000, Math.max(1000, max))
   }, [teamData])
+  // The leader's lap, for the mass-start lap counter in the header.
+  const leaderLapsDone = useMemo(
+    () => leaderLap(data?.riders ?? [], data?.lapsTotal ?? null),
+    [data],
+  )
 
   const toggle = (setter: Dispatch<SetStateAction<string[]>>, value: string) =>
     setter((arr) =>
@@ -159,7 +215,7 @@ export function Overlay({ onHide }: { onHide: () => void }) {
     refreshIntervalSec: intervalSec,
     displayMode: 'all',
     sortMode: 'rank',
-    mode: resolvedMode,
+    mode: toggleMode,
   }
 
   const active = teamMode ? teamData : data
@@ -192,8 +248,11 @@ export function Overlay({ onHide }: { onHide: () => void }) {
         loading={false}
         usingMock={false}
         settings={settings}
-        mode={resolvedMode}
-        onModeChange={(m) => setModeSetting(m)}
+        mode={toggleMode}
+        raceShape={shape}
+        lapsTotal={massStart ? (data?.lapsTotal ?? null) : null}
+        lapsLeader={massStart ? leaderLapsDone : null}
+        onModeChange={handleModeChange}
         onToggleAuto={() => setAutoReload((v) => !v)}
         onChangeInterval={(s) => setIntervalSec(Math.max(30, s))}
         onRefresh={reparse}
@@ -217,6 +276,26 @@ export function Overlay({ onHide }: { onHide: () => void }) {
             onToggleFavorite={(c) => toggle(setFavoriteTeams, c)}
             nonce={nonce}
           />
+        ) : massStart ? (
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
+            <div className="order-2 lg:order-1">
+              <MassStartTower
+                riders={data?.riders ?? []}
+                lapsTotal={data?.lapsTotal ?? null}
+                favorites={favoritesSet}
+                onToggleFavorite={(k) => toggle(setFavorites, k)}
+                nonce={nonce}
+              />
+            </div>
+            <div className="order-1 lg:order-2">
+              <RaceSituation
+                riders={data?.riders ?? []}
+                lapsTotal={data?.lapsTotal ?? null}
+                lapsLeader={leaderLapsDone}
+                favorites={favoritesSet}
+              />
+            </div>
+          </div>
         ) : (
           <TimingTower
             riders={data?.riders ?? []}

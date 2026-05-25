@@ -1,20 +1,24 @@
+import type { GapBand } from '../utils/classifyGap'
 import { classifyGap } from '../utils/classifyGap'
 
 type Props = {
   gapMs: number | null
   scaleMs: number
+  // Optional pre-computed band (e.g. the mass-start classifier). Defaults to the
+  // time-trial classifyGap when omitted, so existing callers are unaffected.
+  band?: GapBand
 }
 
 // A horizontal bar whose length encodes the gap to the leader's finish time,
 // coloured by gap band. Riders without a finish gap render an empty track.
-export function GapBar({ gapMs, scaleMs }: Props) {
+export function GapBar({ gapMs, scaleMs, band: bandOverride }: Props) {
   if (gapMs == null) {
     return (
       <div className="h-2 w-full rounded-full bg-zinc-800/50" aria-hidden="true" />
     )
   }
 
-  const band = classifyGap(gapMs)
+  const band = bandOverride ?? classifyGap(gapMs)
   const denom = scaleMs > 0 ? scaleMs : 1
   const pct = Math.max(3, Math.min(100, (gapMs / denom) * 100))
 

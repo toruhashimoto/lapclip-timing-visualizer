@@ -20,19 +20,43 @@ import type {
 } from './types'
 import { riderKey } from './types'
 import { mockData, mockDataNext } from './mockData'
+import {
+  mockCriteriumData,
+  mockMassDataNext,
+  mockPreStartData,
+  mockRoadData,
+  mockRoadLiveData,
+} from './mockMassData'
 import { mockTeamData, mockTeamDataNext } from './mockTeamData'
 import { diffData } from './utils/diff'
 import { diffTeams } from './utils/diffTeams'
 import { normalizeRiders } from './utils/normalizeRiders'
+import { leaderLap, normalizeMassStart } from './utils/normalizeMassStart'
 import { normalizeTeams } from './utils/normalizeTeams'
 import { ControlPanel } from './components/ControlPanel'
 import { ErrorBanner } from './components/ErrorBanner'
 import { Header } from './components/Header'
 import { HighlightPanel } from './components/HighlightPanel'
+import { MassStartTower } from './components/MassStartTower'
+import { RaceSituation } from './components/RaceSituation'
 import { TeamHighlightPanel } from './components/TeamHighlightPanel'
 import { TeamTower } from './components/TeamTower'
 import { TimingTower } from './components/TimingTower'
 import { UpdateFeed } from './components/UpdateFeed'
+
+// SPA preview can start on a mass-start demo via ?mock=criterium | road.
+function initialDemo(): LapClipData {
+  try {
+    const m = new URL(location.href).searchParams.get('mock')
+    if (m === 'criterium' || m === 'crit') return mockCriteriumData
+    if (m === 'road') return mockRoadData
+    if (m === 'live') return mockRoadLiveData
+    if (m === 'prestart') return mockPreStartData
+  } catch {
+    /* ignore */
+  }
+  return mockData
+}
 
 const DEFAULT_URL =
   'https://matrix-sports.jp/lap/result.php?evt=2026_toj&ctg=001'
@@ -103,8 +127,18 @@ function mergeRetained(
   }
 }
 
-// Retain across fetches, normalize (rank by finish), then diff for change flags.
+// Retain across fetches, normalize, then diff for change flags. Mass-start data
+// is ranked by official place (no intermediate-time retention); the time trial
+// keeps its 中間点 carry-forward + finish-time ranking.
 function ingest(raw: LapClipData, prev: LapClipData | null) {
+  if (raw.raceShape === 'mass_start') {
+    const normalized: LapClipData = {
+      ...raw,
+      riders: normalizeMassStart(raw.riders),
+    }
+    const { riders, events } = diffData(normalized, prev)
+    return { data: { ...normalized, riders }, events }
+  }
   const merged = mergeRetained(raw, prev)
   const normalized: LapClipData = {
     ...merged,
@@ -167,7 +201,7 @@ export default function App() {
     ...DEFAULT_SETTINGS,
     ...loadLS<Partial<Settings>>(LS.settings, {}),
   }))
-  const [data, setData] = useState<LapClipData>(() => ingest(mockData, null).data)
+  const [data, setData] = useState<LapClipData>(() => ingest(initialDemo(), null).data)
   const [previousData, setPreviousData] = useState<LapClipData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -267,7 +301,9 @@ export default function App() {
     }
     if (usingMock) {
       const prev = dataRef.current
-      const { data: next, events } = ingest(mockDataNext(), prev)
+      const rawNext =
+        prev?.raceShape === 'mass_start' ? mockMassDataNext(prev) : mockDataNext()
+      const { data: next, events } = ingest(rawNext, prev)
       setPreviousData(prev)
       setData(next)
       applyEvents(events)
@@ -285,7 +321,7 @@ export default function App() {
       return
     }
     setPreviousData(null)
-    setData(ingest(mockData, null).data)
+    setData(ingest(initialDemo(), null).data)
     setUsingMock(true)
     setError(null)
     setFeed([])
@@ -415,6 +451,12 @@ export default function App() {
     return Math.min(30000, Math.max(1000, max))
   }, [view])
 
+  // The leader's lap, for the mass-start header lap counter.
+  const leaderLapsDone = useMemo(
+    () => leaderLap(data.riders, data.lapsTotal ?? null),
+    [data],
+  )
+
   // Team gaps are typically larger; scale to the field, capped at 60s.
   const scaleMsTeam = useMemo(() => {
     let max = 0
@@ -424,6 +466,8 @@ export default function App() {
   }, [teamData.teams])
 
   const teamMode = mode === 'team'
+  const activeShape = data.raceShape ?? 'individual_tt'
+  const massStartView = !teamMode && activeShape === 'mass_start'
   const sharedMode = appConfig?.appMode === 'shared'
   const teamOnlyToggle = sharedMode && appConfig?.timingMode === 'team_tt'
   const cacheStatus: CacheStatus | null =
@@ -447,6 +491,9 @@ export default function App() {
         usingMock={teamMode ? !!teamData.isMock : usingMock}
         settings={settings}
         mode={mode}
+        raceShape={teamMode ? 'team_tt' : activeShape}
+        lapsTotal={massStartView ? (data.lapsTotal ?? null) : null}
+        lapsLeader={massStartView ? leaderLapsDone : null}
         onModeChange={handleModeChange}
         onToggleAuto={() =>
           setSettings((s) => ({ ...s, autoRefresh: !s.autoRefresh }))
@@ -512,6 +559,15 @@ export default function App() {
                 onToggleFavorite={(c) => toggle(setFavoriteTeams, c)}
                 nonce={teamData.fetchedAt}
               />
+            ) : massStartView ? (
+              <MassStartTower
+                riders={view}
+                lapsTotal={data.lapsTotal ?? null}
+                favorites={favoritesSet}
+                onToggleFavorite={(k) => toggle(setFavorites, k)}
+                nonce={data.fetchedAt}
+                noData={!usingMock && data.riders.length === 0}
+              />
             ) : (
               <TimingTower
                 riders={view}
@@ -526,6 +582,13 @@ export default function App() {
           <aside className="order-1 flex flex-col gap-3 lg:order-2">
             {teamMode ? (
               <TeamHighlightPanel teams={teamData.teams} laps={teamData.laps} />
+            ) : massStartView ? (
+              <RaceSituation
+                riders={data.riders}
+                lapsTotal={data.lapsTotal ?? null}
+                lapsLeader={leaderLapsDone}
+                favorites={favoritesSet}
+              />
             ) : (
               <HighlightPanel
                 riders={data.riders}

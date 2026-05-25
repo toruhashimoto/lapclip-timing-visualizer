@@ -4,7 +4,7 @@
     {
       "name": "lapclip",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev:web"],
+      "runtimeArgs": ["run", "dev"],
       "port": 5173
     }
   ]

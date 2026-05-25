@@ -3,10 +3,22 @@
 // timing UI in a Shadow DOM. No network requests, no storage, no redistribution.
 // Clicking the bookmarklet again (or "更新") just re-reads the current DOM.
 import type { Mode } from '../types'
-import { parseIndividual, parseTeam, detectMode } from '../userscript/parseDom'
+import {
+  detectRaceShape,
+  parseIndividual,
+  parseMassStart,
+  parseTeam,
+} from '../userscript/parseDom'
 import { normalizeRiders } from '../utils/normalizeRiders'
+import { normalizeMassStart } from '../utils/normalizeMassStart'
 import { normalizeTeams } from '../utils/normalizeTeams'
-import { STYLES, h, renderIndividual, renderTeam } from './render'
+import {
+  STYLES,
+  h,
+  renderIndividual,
+  renderMassStart,
+  renderTeam,
+} from './render'
 
 const HOST_ID = 'lc-bm-host'
 
@@ -25,7 +37,9 @@ function mount() {
   style.textContent = STYLES
   shadow.appendChild(style)
 
-  let mode: Mode = detectMode()
+  // null = auto-detect the race shape from page content; otherwise the user
+  // has forced 個人 (TT or mass-start) or チーム.
+  let override: Mode | null = null
 
   const title = h('span', { class: 'title' }, 'LapClip Timing')
   const sub = h('span', { class: 'sub' }, '')
@@ -57,12 +71,24 @@ function mount() {
   shadow.appendChild(wrap)
 
   function render() {
+    let shape: ReturnType<typeof detectRaceShape>
     try {
-      if (mode === 'team') {
+      shape =
+        override === 'team'
+          ? 'team_tt'
+          : override === 'individual'
+            ? detectRaceShape(document, 'about:blank')
+            : detectRaceShape()
+      if (shape === 'team_tt') {
         const td = parseTeam()
         td.teams = normalizeTeams(td.teams)
         sub.textContent = [td.eventName, td.categoryName].filter(Boolean).join(' / ')
         bodyHost.replaceChildren(renderTeam(td))
+      } else if (shape === 'mass_start') {
+        const d = parseMassStart()
+        d.riders = normalizeMassStart(d.riders)
+        sub.textContent = [d.eventName, d.categoryName].filter(Boolean).join(' / ')
+        bodyHost.replaceChildren(renderMassStart(d))
       } else {
         const d = parseIndividual()
         d.riders = normalizeRiders(d.riders)
@@ -75,17 +101,18 @@ function mount() {
         h('div', { class: 'empty' }, '解析に失敗しました。公式ページはそのままご利用ください。'),
       )
       console.warn('[LapClip Bookmarklet] parse failed; page intact', e)
+      shape = 'individual_tt'
     }
-    indBtn.className = mode === 'individual' ? 'on' : ''
-    teamBtn.className = mode === 'team' ? 'on' : ''
+    teamBtn.className = shape === 'team_tt' ? 'on' : ''
+    indBtn.className = shape === 'team_tt' ? '' : 'on'
   }
 
   indBtn.onclick = () => {
-    mode = 'individual'
+    override = 'individual'
     render()
   }
   teamBtn.onclick = () => {
-    mode = 'team'
+    override = 'team'
     render()
   }
   refreshBtn.onclick = render

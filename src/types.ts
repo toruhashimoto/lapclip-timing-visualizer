@@ -11,6 +11,24 @@ export type RiderStatus =
   | 'DSQ'
   | 'UNKNOWN'
 
+// The data shape of a result page, detected from its content (not the URL):
+//   individual_tt — solo time trial, 1/100s precision, 中間点 / FINISH phases.
+//   mass_start     — criterium / road race: lap-progress phases (N周, X/Y周,
+//                    +SPn), whole-second times, bunch finishes ranked by the
+//                    official placing, lapped riders shown as "-N周".
+//   team_tt        — team time trial (大鹿, ctg=004); one row per team.
+export type RaceShape = 'individual_tt' | 'mass_start' | 'team_tt'
+
+// On-course bucket for the live race-situation view of a mass-start race.
+//   lead = front group, main = peloton, chase = between, dropped = behind,
+//   finished = already across the line.
+export type RiderGroup =
+  | 'lead'
+  | 'chase'
+  | 'main'
+  | 'dropped'
+  | 'finished'
+
 export type RiderResult = {
   rank: number | null
   bib: string
@@ -28,9 +46,31 @@ export type RiderResult = {
   finishText: string | null
   finishMs: number | null
 
-  // Gap to the leader's FINISH time (computed).
+  // Gap to the leader's FINISH time (computed). For mass-start finishers this is
+  // the time gap to the winner; for lapped riders it is null (see lapsDown).
   gapText: string | null
   gapMs: number | null
+
+  // --- Mass-start (criterium / road) fields. Unused for individual TT. ---
+  // The official placing from the source ("N位"). Authoritative for mass-start
+  // because many riders share the same bunch time, so a time sort cannot rank
+  // them — we trust the source order instead.
+  officialRank?: number | null
+  // The single time the source shows at the rider's current checkpoint
+  // (cumulative from the start). For a finisher this is their finish time.
+  elapsedText?: string | null
+  elapsedMs?: number | null
+  // Lap progress parsed from the phase: "X/Y周" -> done=X,total=Y; "N周" -> done=N.
+  lapsDone?: number | null
+  lapsTotal?: number | null
+  // Last intermediate timing point passed, e.g. "SP1", "SP2", "KOM".
+  lastCheckpoint?: string | null
+  // Laps behind the leader, parsed from a "-N周" gap. 0/undefined = lead lap.
+  lapsDown?: number | null
+  // True once the rider has finished (gap is a time, not "-N周", or phase=FINISH).
+  isFinisher?: boolean
+  // On-course bucket for the live race-situation view (derived, mass-start only).
+  group?: RiderGroup
 
   // Derived client-side by diffing against the previous fetch.
   previousRank?: number | null
@@ -48,6 +88,10 @@ export type LapClipData = {
   sourceUrl: string
   fetchedAt: string // ISO 8601
   riders: RiderResult[]
+  // Detected from the page content. 'individual_tt' (default) or 'mass_start'.
+  raceShape?: RaceShape
+  // Total laps for a mass-start race, when the source exposes "X/Y周".
+  lapsTotal?: number | null
   isMock?: boolean
   // Set by the proxy's shared cache layer.
   cacheStatus?: CacheStatus
