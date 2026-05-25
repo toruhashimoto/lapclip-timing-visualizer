@@ -1,0 +1,5 @@
+<resources>
+    <style name="Theme.LapClipVisualizer" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:statusBarColor">#18181B</item>
+    </style>
+</resources>

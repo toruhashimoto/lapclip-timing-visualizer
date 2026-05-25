@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+@theme {
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo,
+    Consolas, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #09090b; /* zinc-950 */
+  color: #f4f4f5; /* zinc-100 */
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Row flash when a rider's time/rank just changed. */
+@keyframes lc-flash {
+  0% {
+    background-color: rgba(168, 85, 247, 0.45);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+.lc-flash {
+  animation: lc-flash 1.8s ease-out 1;
+}
+
+/* Gentle pulse for the "new finish" highlight card. */
+@keyframes lc-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+.lc-pulse {
+  animation: lc-pulse 1.6s ease-in-out infinite;
+}
+
+/* Animated width transition for gap bars. */
+.lc-bar {
+  transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Thin custom scrollbar for the dark theme. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3f3f46 transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: #3f3f46;
+  border-radius: 9999px;
+}

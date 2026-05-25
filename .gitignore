@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.dev.vars
+.wrangler/
+runtime/
+logs/
+*.log
+cf_token.txt
+app_secret.txt
+tmp_*.html
