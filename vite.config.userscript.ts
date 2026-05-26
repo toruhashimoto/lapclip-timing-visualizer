@@ -28,6 +28,14 @@ export default defineConfig({
         match: ['https://matrix-sports.jp/lap/result.php*'],
         'run-at': 'document-end',
         grant: 'none',
+        // Tampermonkey auto-update: it fetches these programmatically (GET to the
+        // latest release asset), so GitHub's attachment Content-Disposition — which
+        // blocks a *browser* install click — does not matter here. The first jump
+        // onto a version that carries these still has to be installed by hand.
+        updateURL:
+          'https://github.com/toruhashimoto/lapclip-timing-visualizer/releases/latest/download/lapclip-visualizer.user.js',
+        downloadURL:
+          'https://github.com/toruhashimoto/lapclip-timing-visualizer/releases/latest/download/lapclip-visualizer.user.js',
       },
       build: {
         fileName: 'lapclip-visualizer.user.js',

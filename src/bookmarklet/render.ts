@@ -15,7 +15,7 @@ import {
   classifyMassStartGap,
 } from '../utils/classifyGap'
 import { lapSplits, perLapBest } from '../utils/normalizeTeams'
-import { clusterGroups, lappedRiders } from '../utils/groupRiders'
+import { clusterGroups, lappedRiders, raceSummary } from '../utils/groupRiders'
 import { leaderLap } from '../utils/normalizeMassStart'
 
 // Gap-band key -> concrete colour (the shared bands use Tailwind class names,
@@ -153,6 +153,19 @@ function renderSituation(data: LapClipData): HTMLElement {
           : 'LAP —'
 
   const row = h('div', { class: 'sit' }, h('span', { class: 'sitlap' }, lapLabel))
+
+  // Once the field has finished, the on-road groups fragment into finish-time
+  // clusters — show a result summary instead (mirrors the React panel).
+  const sum = raceSummary(data.riders)
+  if (sum.finished) {
+    row.append(
+      h('span', { class: 'sitchip' }, `完走 ${sum.finishers}`),
+      h('span', { class: 'sitchip' }, `先頭集団 ${sum.leadBunch}`),
+      h('span', { class: 'sitchip dim' }, `リタイア/周回遅れ ${sum.nonFinishers}`),
+    )
+    return row
+  }
+
   for (const g of groups) {
     const gap = g.frontGapMs > 0 ? ` ${formatGapWhole(g.frontGapMs)}` : ''
     row.append(

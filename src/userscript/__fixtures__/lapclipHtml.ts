@@ -79,6 +79,32 @@ export const preStartRows: FixtureRow[] = [
   { rank: '-', bib: '3', team: 'AAA', name: 'Rider Charlie', phase: '0周', time: '-:--:--', gap: '0:00' },
 ]
 
+// --- 8-lap circuit road (いなべステージ real shapes, observed 2026-05-26). ---
+// Mid-race: everyone on "0/8周" (total laps known), a 2-rider break + 5-rider
+// peloton ~30s back. Final: a FINISH bunch (same time), a chaser, a gruppetto
+// ~12 min down, plus abandons shown as "X/8周" / "X/8周 SP1" a lap or more down.
+export const ROAD8_TITLE =
+  'Tour of Japan 2026 - いなべステージのリザルト | LAP CLIP'
+export const road8LiveRows: FixtureRow[] = [
+  { rank: '1位', bib: '121', team: 'SWT', name: 'Break A', phase: '0/8周', time: '0:11:02', gap: '0:00' },
+  { rank: '2位', bib: '22', team: 'TUK', name: 'Break B', phase: '0/8周', time: '0:11:05', gap: '+0:03' },
+  { rank: '3位', bib: '2', team: 'JCL', name: 'Peloton A', phase: '0/8周', time: '0:11:32', gap: '+0:30' },
+  { rank: '4位', bib: '42', team: 'AAA', name: 'Peloton B', phase: '0/8周', time: '0:11:33', gap: '+0:31' },
+  { rank: '5位', bib: '14', team: 'BBB', name: 'Peloton C', phase: '0/8周', time: '0:11:34', gap: '+0:32' },
+  { rank: '6位', bib: '8', team: 'TFT', name: 'Peloton D', phase: '0/8周', time: '0:11:35', gap: '+0:33' },
+  { rank: '7位', bib: '91', team: 'BLZ', name: 'Peloton E', phase: '0/8周', time: '0:11:36', gap: '+0:34' },
+]
+export const road8FinalRows: FixtureRow[] = [
+  { rank: '1位', bib: '3', team: 'TUK', name: 'Winner', phase: 'FINISH', time: '2:39:06', gap: '0:00' },
+  { rank: '2位', bib: '71', team: 'VCF', name: 'Second', phase: 'FINISH', time: '2:39:06', gap: '0:00' },
+  { rank: '3位', bib: '53', team: 'JCL', name: 'Third', phase: 'FINISH', time: '2:39:06', gap: '0:00' },
+  { rank: '4位', bib: '15', team: 'TFT', name: 'Fourth', phase: 'FINISH', time: '2:39:42', gap: '+0:36' },
+  { rank: '5位', bib: '60', team: 'SBC', name: 'Gruppetto A', phase: 'FINISH', time: '2:51:00', gap: '+11:54' },
+  { rank: '6位', bib: '27', team: 'AVC', name: 'Gruppetto B', phase: 'FINISH', time: '2:51:02', gap: '+11:56' },
+  { rank: '85位', bib: '24', team: 'KIN', name: 'Abandon A', phase: '6/8周 SP1', time: '2:02:31', gap: '-2周' },
+  { rank: '86位', bib: '122', team: 'BLZ', name: 'Abandon B', phase: '5/8周', time: '1:35:21', gap: '-3周' },
+]
+
 // --- Road (京都ステージ shape): whole-second, FINISH + "X/Y周 SPn" phases. ---
 export const ROAD_TITLE =
   'Tour of Japan 2026 - JPF 京都ステージのリザルト | LAP CLIP'

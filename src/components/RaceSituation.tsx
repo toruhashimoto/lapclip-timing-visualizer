@@ -7,6 +7,7 @@ import {
   clusterGroups,
   lappedRiders,
   passedCheckpoints,
+  raceSummary,
 } from '../utils/groupRiders'
 
 type Props = {
@@ -73,6 +74,7 @@ export function RaceSituation({
   const groups = useMemo(() => clusterGroups(riders), [riders])
   const lapped = useMemo(() => lappedRiders(riders), [riders])
   const checkpoints = useMemo(() => passedCheckpoints(riders), [riders])
+  const summary = useMemo(() => raceSummary(riders), [riders])
 
   const remaining =
     lapsTotal != null && lapsLeader != null ? lapsTotal - lapsLeader : null
@@ -114,23 +116,68 @@ export function RaceSituation({
         </div>
       )}
 
-      {groups.length === 0 ? (
+      {summary.finished ? (
+        <div className="px-3 py-3">
+          {summary.winner && (
+            <div className="mb-2 flex items-baseline justify-between gap-2 border-b border-zinc-800/60 pb-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-amber-300">
+                勝者
+              </span>
+              <span className="min-w-0 truncate text-sm font-semibold text-zinc-100">
+                {summary.winner.name}
+                {summary.winner.teamCode && (
+                  <span className="ml-1 text-xs font-normal text-zinc-500">
+                    [{summary.winner.teamCode}]
+                  </span>
+                )}
+              </span>
+            </div>
+          )}
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div>
+              <div className="font-mono text-lg font-bold tabular-nums text-zinc-100">
+                {summary.finishers}
+              </div>
+              <div className="text-[10px] uppercase tracking-wider text-zinc-500">
+                完走
+              </div>
+            </div>
+            <div>
+              <div className="font-mono text-lg font-bold tabular-nums text-sky-300">
+                {summary.leadBunch}
+              </div>
+              <div className="text-[10px] uppercase tracking-wider text-zinc-500">
+                先頭集団(同着)
+              </div>
+            </div>
+            <div>
+              <div className="font-mono text-lg font-bold tabular-nums text-orange-300">
+                {summary.nonFinishers}
+              </div>
+              <div className="text-[10px] uppercase tracking-wider text-zinc-500">
+                リタイア/周回遅れ
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : groups.length === 0 ? (
         <p className="px-3 py-8 text-center text-sm text-zinc-600">
           コース上のグループ情報がまだありません。
         </p>
       ) : (
-        groups.map((g, i) => (
-          <GroupRow key={`${g.kind}-${i}`} group={g} favorites={favorites} />
-        ))
-      )}
-
-      {lapped.length > 0 && (
-        <div className="flex items-center justify-between border-t border-zinc-800 px-3 py-2 text-xs">
-          <span className="text-zinc-500">周回遅れ</span>
-          <span className="font-mono tabular-nums text-orange-300">
-            {lapped.length}名
-          </span>
-        </div>
+        <>
+          {groups.map((g, i) => (
+            <GroupRow key={`${g.kind}-${i}`} group={g} favorites={favorites} />
+          ))}
+          {lapped.length > 0 && (
+            <div className="flex items-center justify-between border-t border-zinc-800 px-3 py-2 text-xs">
+              <span className="text-zinc-500">周回遅れ</span>
+              <span className="font-mono tabular-nums text-orange-300">
+                {lapped.length}名
+              </span>
+            </div>
+          )}
+        </>
       )}
     </section>
   )

@@ -76,3 +76,33 @@ export function passedCheckpoints(riders: RiderResult[]): string[] {
   }
   return [...seen].sort()
 }
+
+// Post-race summary. The on-road grouping is great while the race is on, but once
+// the field finishes it fragments into many finish-time clusters — so once at
+// least half the field has finished we show a result summary instead.
+export type RaceSummary = {
+  finished: boolean
+  finishers: number
+  nonFinishers: number // abandons / lapped / not classified
+  leadBunch: number // finishers on the winner's time (gap ≤ 1s) = the front group
+  winner: RiderResult | null
+}
+
+export function raceSummary(riders: RiderResult[]): RaceSummary {
+  const finishers = riders.filter((r) => r.isFinisher)
+  // FINISH is the only sure end signal; a criterium never reports it, so it
+  // simply never flips to the summary (stays on the live group view).
+  const finished = riders.length > 0 && finishers.length >= riders.length / 2
+  const leadBunch = finishers.filter(
+    (r) => r.gapMs != null && r.gapMs <= 1000,
+  ).length
+  const winner =
+    finishers.find((r) => r.rank === 1) ?? finishers[0] ?? null
+  return {
+    finished,
+    finishers: finishers.length,
+    nonFinishers: riders.length - finishers.length,
+    leadBunch,
+    winner,
+  }
+}

@@ -10,19 +10,28 @@ import {
 } from './parseDom'
 import { normalizeRiders } from '../utils/normalizeRiders'
 import {
+  leaderLap,
   leadLapCount,
   normalizeMassStart,
 } from '../utils/normalizeMassStart'
-import { clusterGroups } from '../utils/groupRiders'
+import {
+  clusterGroups,
+  lappedRiders,
+  passedCheckpoints,
+  raceSummary,
+} from '../utils/groupRiders'
 import {
   CRIT_TITLE,
   PRESTART_TITLE,
+  ROAD8_TITLE,
   ROAD_TITLE,
   TT_TITLE,
   clearPage,
   critRows,
   mountPage,
   preStartRows,
+  road8FinalRows,
+  road8LiveRows,
   roadRows,
   ttLiveRows,
   ttRows,
@@ -200,6 +209,47 @@ describe('normalizeMassStart', () => {
     expect(out.map((r) => r.rank)).toEqual([1, 2, 3, 94])
     expect(out.map((r) => r.officialRank)).toEqual([1, 2, 3, 94])
     expect(leadLapCount(out)).toBe(3) // 3 lead-lap, 1 lapped
+  })
+})
+
+// Locks in the real data shapes seen on the live いなべ 8-lap road stage.
+describe('8-lap road race (いなべ real shapes)', () => {
+  it('mid-race: breakaway + peloton, lap total known, not finished', () => {
+    mountPage(ROAD8_TITLE, road8LiveRows)
+    const data = parseMassStart()
+    expect(data.raceShape).toBe('mass_start')
+    expect(data.lapsTotal).toBe(8)
+    const riders = normalizeMassStart(data.riders)
+    const groups = clusterGroups(riders)
+    expect(groups.map((g) => g.kind)).toEqual(['break', 'peloton'])
+    expect(groups.map((g) => g.size)).toEqual([2, 5])
+    expect(leaderLap(riders, data.lapsTotal ?? null)).toBe(0) // 残り 8周
+    expect(raceSummary(riders).finished).toBe(false)
+  })
+
+  it('final: FINISH bunch + gruppetto + abandons (X/8周 SP1) + lap-down', () => {
+    mountPage(ROAD8_TITLE, road8FinalRows)
+    const data = parseMassStart()
+    const riders = normalizeMassStart(data.riders)
+    expect(data.lapsTotal).toBe(8)
+    expect(riders.filter((r) => r.isFinisher).length).toBe(6)
+    expect(lappedRiders(riders).length).toBe(2)
+    expect(passedCheckpoints(riders)).toEqual(['SP1'])
+    expect(leaderLap(riders, data.lapsTotal ?? null)).toBe(8) // remaining 0 -> ゴール
+
+    const sum = raceSummary(riders)
+    expect(sum.finished).toBe(true)
+    expect(sum.finishers).toBe(6)
+    expect(sum.leadBunch).toBe(3) // three across on the same time
+    expect(sum.nonFinishers).toBe(2)
+    expect(sum.winner?.bib).toBe('3')
+
+    const abandon = riders.find((r) => r.officialRank === 85)!
+    expect(abandon.isFinisher).toBe(false)
+    expect(abandon.lapsDone).toBe(6)
+    expect(abandon.lapsTotal).toBe(8)
+    expect(abandon.lastCheckpoint).toBe('SP1')
+    expect(abandon.lapsDown).toBe(2)
   })
 })
 
