@@ -3,17 +3,17 @@ import { GAP_BAND_ORDER, getBand } from '../utils/classifyGap'
 import { perLapBest } from '../utils/normalizeTeams'
 import { TeamRow } from './TeamRow'
 
-// Column widths: star | P | Δ | Team | Lap1..Lap(N-1) | Finish | Gap | Bar | Status
-// The last timing column is always "Finish" (total time); intermediate laps come before it.
-// New entries here for each distinct laps count so Tailwind JIT can scan the full string.
+// Column widths: star | P | Δ | Team | Lap1..LapN | Finish | Gap | Bar | Status
+// All lap columns show per-lap split times; "Finish" is always the total time.
+// Key = laps + 1 (N lap-split cols + 1 finish col). Tailwind JIT needs full strings.
 const ROW_GRIDS: Record<number, string> = {
-  1: 'grid items-center gap-x-2 grid-cols-[1.5rem_2rem_1.75rem_minmax(8rem,1fr)_5rem_4.25rem_minmax(3.5rem,8rem)_4rem]',
   2: 'grid items-center gap-x-2 grid-cols-[1.5rem_2rem_1.75rem_minmax(8rem,1fr)_4.25rem_5rem_4.25rem_minmax(3.5rem,8rem)_4rem]',
   3: 'grid items-center gap-x-2 grid-cols-[1.5rem_2rem_1.75rem_minmax(8rem,1fr)_4.25rem_4.25rem_5rem_4.25rem_minmax(3.5rem,8rem)_4rem]',
   4: 'grid items-center gap-x-2 grid-cols-[1.5rem_2rem_1.75rem_minmax(8rem,1fr)_4.25rem_4.25rem_4.25rem_5rem_4.25rem_minmax(3.5rem,8rem)_4rem]',
+  5: 'grid items-center gap-x-2 grid-cols-[1.5rem_2rem_1.75rem_minmax(8rem,1fr)_4.25rem_4.25rem_4.25rem_4.25rem_5rem_4.25rem_minmax(3.5rem,8rem)_4rem]',
 }
 function rowGrid(laps: number): string {
-  return ROW_GRIDS[laps] ?? ROW_GRIDS[3]
+  return ROW_GRIDS[laps + 1] ?? ROW_GRIDS[4]
 }
 
 type Props = {
@@ -74,9 +74,10 @@ export function TeamTower({
             <div>Team</div>
             {Array.from({ length: laps }, (_, i) => (
               <div key={i} className="text-right">
-                {i < laps - 1 ? `Lap ${i + 1}` : 'Finish'}
+                Lap {i + 1}
               </div>
             ))}
+            <div className="text-right">Finish</div>
             <div className="text-right">Gap</div>
             <div className="px-1">Visual gap</div>
             <div className="text-center">Status</div>
