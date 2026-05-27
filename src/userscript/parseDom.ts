@@ -62,6 +62,17 @@ function classifyPhase(
       isFinish: false,
       isIntermediate: false,
     }
+  // "LAP1" / "LAP 2" / "LAP3" — team TT intermediate checkpoint label.
+  // Must be caught before the default fallthrough, which would wrongly treat
+  // any unknown phase-with-time as FINISH.
+  if (/\bLAP\s*\d+\b/i.test(phase))
+    return {
+      status: 'RUNNING',
+      finishMs: null,
+      intermediateMs: timeMs,
+      isFinish: false,
+      isIntermediate: true,
+    }
   if (/\d+\s*周/.test(phase)) {
     if (timeMs != null)
       return {
@@ -183,18 +194,30 @@ export function parseIndividual(root: ParentNode = document): LapClipData {
   }
 }
 
-// Team TT (大鹿): best-effort mapping of each result row to a team. result.php
-// shows the team's current/finish time + gap; per-lap splits (Lap 1/2/3) are
-// NOT on this page, so lapsCumMs is filled only for the finish checkpoint until
-// the parser is calibrated against the real team-TT DOM on race day. The tower
-// renders finish + gap regardless, so this is safe to ship.
+// Team TT (大鹿): one row per team showing the team's current or final time.
+// Phase labels observed on the live DOM:
+//   "FINISH"  — official finish time
+//   "LAP1" / "LAP2" — cumulative time at intermediate checkpoint N
+//   "N周" (N > 0)   — alternative checkpoint notation (N laps completed)
+//   "0周"            — not yet started
 export function parseTeam(root: ParentNode = document, laps = 3): TeamData {
   const { eventName, categoryName } = eventInfo(root)
   const teams: TeamResult[] = parseEntries(root).map((e) => {
     const timeMs = parseTimeToMs(e.timeText)
     const c = classifyPhase(e.phase, timeMs)
     const lapsCumMs: (number | null)[] = new Array(Math.max(1, laps)).fill(null)
-    if (c.isFinish && timeMs != null) lapsCumMs[lapsCumMs.length - 1] = timeMs
+    if (timeMs != null) {
+      if (c.isFinish) {
+        lapsCumMs[lapsCumMs.length - 1] = timeMs
+      } else if (c.isIntermediate) {
+        // Map the checkpoint label to the correct lap slot (1-based → 0-based).
+        // "LAP1"/"LAP 2" and "N周" (N > 0) are both supported.
+        const lapLabel = e.phase.match(/\bLAP\s*(\d+)\b/i)
+        const lapCycle = e.phase.match(/^(\d+)\s*周$/)
+        const n = lapLabel ? Number(lapLabel[1]) : lapCycle ? Number(lapCycle[1]) : null
+        if (n != null && n >= 1 && n <= laps) lapsCumMs[n - 1] = timeMs
+      }
+    }
     return {
       rank: null,
       teamCode: e.teamCode ?? e.bib,

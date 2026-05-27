@@ -105,6 +105,17 @@ export const road8FinalRows: FixtureRow[] = [
   { rank: '86位', bib: '122', team: 'BLZ', name: 'Abandon B', phase: '5/8周', time: '1:35:21', gap: '-3周' },
 ]
 
+// --- Team TT (大鹿ステージ shape): 1/100s times, "LAP N" / "N周" / FINISH phases. ---
+export const TEAM_TT_TITLE =
+  'Tour of Japan 2026 - Astemo 大鹿ステージのリザルト | LAP CLIP'
+// Mid-race snapshot: 1 finisher, 1 team at LAP2, 1 at LAP1, 1 not started.
+export const teamTTMidRows: FixtureRow[] = [
+  { rank: '1位', bib: '41', name: 'KINAN RACING TEAM', phase: 'FINISH', time: '0:16:01.33', gap: '0:00.00' },
+  { rank: '-', bib: '91', name: 'SEOUL CYCLING TEAM', phase: 'LAP2', time: '0:09:10.00', gap: '-:--' },
+  { rank: '-', bib: '1', name: 'TEAM UKYO', phase: 'LAP1', time: '0:04:25.00', gap: '-:--' },
+  { rank: '-', bib: '21', name: 'LI NING STAR', phase: '0周', time: '-:--:--.--', gap: '-:--' },
+]
+
 // --- Road (京都ステージ shape): whole-second, FINISH + "X/Y周 SPn" phases. ---
 export const ROAD_TITLE =
   'Tour of Japan 2026 - JPF 京都ステージのリザルト | LAP CLIP'

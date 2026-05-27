@@ -7,6 +7,7 @@ import {
   parseLapsDown,
   parseMassStart,
   parseRankNum,
+  parseTeam,
 } from './parseDom'
 import { normalizeRiders } from '../utils/normalizeRiders'
 import {
@@ -25,6 +26,7 @@ import {
   PRESTART_TITLE,
   ROAD8_TITLE,
   ROAD_TITLE,
+  TEAM_TT_TITLE,
   TT_TITLE,
   clearPage,
   critRows,
@@ -33,6 +35,7 @@ import {
   road8FinalRows,
   road8LiveRows,
   roadRows,
+  teamTTMidRows,
   ttLiveRows,
   ttRows,
 } from './__fixtures__/lapclipHtml'
@@ -146,6 +149,40 @@ describe('detectMode (URL hint, unchanged)', () => {
   })
   it('other ctg is individual', () => {
     expect(detectMode(CTG('002'))).toBe('individual')
+  })
+})
+
+describe('parseTeam: mid-race team TT', () => {
+  it('maps LAP1/LAP2 phases to the correct lapsCumMs slot, not FINISH', () => {
+    mountPage(TEAM_TT_TITLE, teamTTMidRows)
+    const data = parseTeam()
+    expect(data.teams).toHaveLength(4)
+
+    const finisher = data.teams.find((t) => t.teamCode === '41')!
+    expect(finisher.status).toBe('FINISH')
+    expect(finisher.finishMs).toBe((16 * 60 + 1.33) * 1000)
+    expect(finisher.lapsCumMs[2]).toBe(finisher.finishMs)
+    expect(finisher.lapsCumMs[0]).toBeNull()
+    expect(finisher.lapsCumMs[1]).toBeNull()
+
+    const atLap2 = data.teams.find((t) => t.teamCode === '91')!
+    expect(atLap2.status).toBe('RUNNING')
+    expect(atLap2.finishMs).toBeNull()
+    expect(atLap2.lapsCumMs[1]).toBe((9 * 60 + 10) * 1000) // slot 1 = LAP2
+    expect(atLap2.lapsCumMs[0]).toBeNull()
+    expect(atLap2.lapsCumMs[2]).toBeNull()
+
+    const atLap1 = data.teams.find((t) => t.teamCode === '1')!
+    expect(atLap1.status).toBe('RUNNING')
+    expect(atLap1.finishMs).toBeNull()
+    expect(atLap1.lapsCumMs[0]).toBe((4 * 60 + 25) * 1000) // slot 0 = LAP1
+    expect(atLap1.lapsCumMs[1]).toBeNull()
+    expect(atLap1.lapsCumMs[2]).toBeNull()
+
+    const notStarted = data.teams.find((t) => t.teamCode === '21')!
+    expect(notStarted.status).toBe('WAIT')
+    expect(notStarted.finishMs).toBeNull()
+    expect(notStarted.lapsCumMs.every((v) => v === null)).toBe(true)
   })
 })
 
