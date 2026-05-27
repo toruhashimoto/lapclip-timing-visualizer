@@ -24,6 +24,10 @@ import {
   parseMassStart,
   parseTeam,
 } from './parseDom'
+import {
+  enrichTeamsWithLaptimes,
+  evtCtgFromUrl,
+} from './fetchLaptimes'
 
 type ModeSetting = Mode | 'auto'
 
@@ -174,6 +178,62 @@ export function Overlay({ onHide }: { onHide: () => void }) {
       window.clearTimeout(timer)
     }
   }, [reparse])
+
+  // After each team-TT parse, fetch per-lap splits from laptimes.php for
+  // finished teams whose lapsCumMs is incomplete. Results are cached by bib
+  // so each team is fetched at most once per session.
+  const laptimesCache = useRef<Map<string, (number | null)[]>>(new Map())
+  const laptimerAbort = useRef<AbortController | null>(null)
+  useEffect(() => {
+    if (!teamMode || !teamData) return
+    const { evt, ctg } = evtCtgFromUrl()
+    if (!evt || !ctg) return
+
+    // Apply any already-cached laps immediately.
+    const applyCache = (teams: typeof teamData.teams) =>
+      teams.map((t) => {
+        const cached = laptimesCache.current.get(t.teamCode)
+        if (!cached) return t
+        return {
+          ...t,
+          lapsCumMs: cached,
+          finishMs: t.finishMs ?? cached[teamData.laps - 1],
+        }
+      })
+
+    const withCache = applyCache(teamData.teams)
+    const needFetch = withCache.filter(
+      (t) => t.status === 'FINISH' && t.lapsCumMs.some((v) => v == null),
+    )
+    if (needFetch.length === 0) {
+      // Cache was complete — just update display if cache added anything.
+      if (withCache.some((t, i) => t !== teamData.teams[i])) {
+        setTeamData((prev) =>
+          prev ? { ...prev, teams: normalizeTeams(withCache) } : prev,
+        )
+      }
+      return
+    }
+
+    laptimerAbort.current?.abort()
+    const ac = new AbortController()
+    laptimerAbort.current = ac
+
+    enrichTeamsWithLaptimes(withCache, evt, ctg, teamData.laps, ac.signal)
+      .then((enriched) => {
+        if (ac.signal.aborted) return
+        enriched.forEach((t) => {
+          if (t.lapsCumMs.some((v) => v != null))
+            laptimesCache.current.set(t.teamCode, t.lapsCumMs)
+        })
+        setTeamData((prev) =>
+          prev ? { ...prev, teams: normalizeTeams(enriched) } : prev,
+        )
+      })
+      .catch(() => {})
+  // Re-run when new data arrives (fetchedAt changes each reparse).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamData?.fetchedAt, teamMode])
 
   // Optional auto-reload of the OFFICIAL page (off by default, min 30s). Reloading
   // re-runs the userscript, which re-parses — we never fetch data ourselves.

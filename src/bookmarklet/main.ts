@@ -9,6 +9,10 @@ import {
   parseMassStart,
   parseTeam,
 } from '../userscript/parseDom'
+import {
+  enrichTeamsWithLaptimes,
+  evtCtgFromUrl,
+} from '../userscript/fetchLaptimes'
 import { normalizeRiders } from '../utils/normalizeRiders'
 import { normalizeMassStart } from '../utils/normalizeMassStart'
 import { normalizeTeams } from '../utils/normalizeTeams'
@@ -40,6 +44,8 @@ function mount() {
   // null = auto-detect the race shape from page content; otherwise the user
   // has forced 個人 (TT or mass-start) or チーム.
   let override: Mode | null = null
+  // AbortController for the in-flight laptimes enrichment.
+  let laptimerAbort: AbortController | null = null
 
   const title = h('span', { class: 'title' }, 'LapClip Timing')
   const sub = h('span', { class: 'sub' }, '')
@@ -84,6 +90,21 @@ function mount() {
         td.teams = normalizeTeams(td.teams)
         sub.textContent = [td.eventName, td.categoryName].filter(Boolean).join(' / ')
         bodyHost.replaceChildren(renderTeam(td))
+        // Enrich finished teams with per-lap splits from laptimes.php.
+        // Cancel any previous in-flight request before starting a new one.
+        laptimerAbort?.abort()
+        const ac = new AbortController()
+        laptimerAbort = ac
+        const { evt, ctg } = evtCtgFromUrl()
+        if (evt && ctg) {
+          enrichTeamsWithLaptimes(td.teams, evt, ctg, td.laps, ac.signal)
+            .then((enriched) => {
+              if (ac.signal.aborted) return
+              td.teams = normalizeTeams(enriched)
+              bodyHost.replaceChildren(renderTeam(td))
+            })
+            .catch(() => {})
+        }
       } else if (shape === 'mass_start') {
         const d = parseMassStart()
         d.riders = normalizeMassStart(d.riders)

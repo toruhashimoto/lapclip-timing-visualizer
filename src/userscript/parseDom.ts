@@ -213,7 +213,8 @@ export function parseTeam(root: ParentNode = document, laps = 3): TeamData {
         // Map the checkpoint label to the correct lap slot (1-based → 0-based).
         // "LAP1"/"LAP 2" and "N周" (N > 0) are both supported.
         const lapLabel = e.phase.match(/\bLAP\s*(\d+)\b/i)
-        const lapCycle = e.phase.match(/^(\d+)\s*周$/)
+        // "N周" or "N/M周" (N = laps done, M = total)
+        const lapCycle = e.phase.match(/^(\d+)(?:\/\d+)?\s*周$/)
         const n = lapLabel ? Number(lapLabel[1]) : lapCycle ? Number(lapCycle[1]) : null
         if (n != null && n >= 1 && n <= laps) lapsCumMs[n - 1] = timeMs
       }
