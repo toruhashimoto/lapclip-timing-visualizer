@@ -134,8 +134,21 @@ export function TeamRow({
         </span>
       </div>
 
-      {/* Lap split durations; purple = fastest split for that lap */}
+      {/* Intermediate lap splits (Lap 1 … Lap N-1), then Finish (total time) */}
       {Array.from({ length: laps }, (_, i) => {
+        if (i === laps - 1) {
+          return (
+            <div key={i} className="text-right font-mono tabular-nums">
+              {team.finishMs != null ? (
+                <span className={isLeader ? 'text-amber-200' : 'text-zinc-100'}>
+                  {formatTimeMs(team.finishMs)}
+                </span>
+              ) : (
+                <span className="text-zinc-700">—</span>
+              )}
+            </div>
+          )
+        }
         const s = splits[i] ?? null
         const best = s != null && lapBest[i] != null && s === lapBest[i]
         return (
@@ -149,17 +162,6 @@ export function TeamRow({
           </div>
         )
       })}
-
-      {/* Finish (total) */}
-      <div className="text-right font-mono tabular-nums">
-        {team.finishMs != null ? (
-          <span className={isLeader ? 'text-amber-200' : 'text-zinc-100'}>
-            {formatTimeMs(team.finishMs)}
-          </span>
-        ) : (
-          <span className="text-zinc-600">—</span>
-        )}
-      </div>
 
       {/* Gap */}
       <div className="text-right leading-tight">

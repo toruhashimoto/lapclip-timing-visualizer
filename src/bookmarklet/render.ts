@@ -264,8 +264,8 @@ export function renderTeam(data: TeamData): HTMLElement {
     h('th', { class: 'rank' }, 'P'),
     h('th', {}, 'Team'),
   ]
-  for (let i = 0; i < laps; i++) headCells.push(h('th', { class: 'r' }, `Lap ${i + 1}`))
-  headCells.push(h('th', { class: 'r' }, 'Total'), h('th', { class: 'r' }, 'Gap'), h('th', { class: 'barcell' }, ''))
+  for (let i = 0; i < laps - 1; i++) headCells.push(h('th', { class: 'r' }, `Lap ${i + 1}`))
+  headCells.push(h('th', { class: 'r' }, 'Finish'), h('th', { class: 'r' }, 'Gap'), h('th', { class: 'barcell' }, ''))
   const head = h('tr', {}, ...headCells)
 
   const anyLap = teams.some((t) => t.lapsCumMs.some((x) => x != null))
@@ -277,7 +277,7 @@ export function renderTeam(data: TeamData): HTMLElement {
       h('td', { class: 'name' }, h('span', { class: 'team' }, t.teamCode ? `[${t.teamCode}] ` : ''), document.createTextNode(t.teamName)),
     ]
     const sp = lapSplits(t)
-    for (let i = 0; i < laps; i++) {
+    for (let i = 0; i < laps - 1; i++) {
       const v = sp[i]
       const isBest = v != null && best[i] != null && v === best[i]
       cells.push(h('td', { class: isBest ? 'r mono best' : 'r mono' }, v != null ? formatTimeMs(v) : '–'))

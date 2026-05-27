@@ -3,8 +3,18 @@ import { GAP_BAND_ORDER, getBand } from '../utils/classifyGap'
 import { perLapBest } from '../utils/normalizeTeams'
 import { TeamRow } from './TeamRow'
 
-const ROW_GRID =
-  'grid items-center gap-x-2 grid-cols-[1.5rem_2rem_1.75rem_minmax(8rem,1fr)_4.25rem_4.25rem_4.25rem_5rem_4.25rem_minmax(3.5rem,8rem)_4rem]'
+// Column widths: star | P | Δ | Team | Lap1..Lap(N-1) | Finish | Gap | Bar | Status
+// The last timing column is always "Finish" (total time); intermediate laps come before it.
+// New entries here for each distinct laps count so Tailwind JIT can scan the full string.
+const ROW_GRIDS: Record<number, string> = {
+  1: 'grid items-center gap-x-2 grid-cols-[1.5rem_2rem_1.75rem_minmax(8rem,1fr)_5rem_4.25rem_minmax(3.5rem,8rem)_4rem]',
+  2: 'grid items-center gap-x-2 grid-cols-[1.5rem_2rem_1.75rem_minmax(8rem,1fr)_4.25rem_5rem_4.25rem_minmax(3.5rem,8rem)_4rem]',
+  3: 'grid items-center gap-x-2 grid-cols-[1.5rem_2rem_1.75rem_minmax(8rem,1fr)_4.25rem_4.25rem_5rem_4.25rem_minmax(3.5rem,8rem)_4rem]',
+  4: 'grid items-center gap-x-2 grid-cols-[1.5rem_2rem_1.75rem_minmax(8rem,1fr)_4.25rem_4.25rem_4.25rem_5rem_4.25rem_minmax(3.5rem,8rem)_4rem]',
+}
+function rowGrid(laps: number): string {
+  return ROW_GRIDS[laps] ?? ROW_GRIDS[3]
+}
 
 type Props = {
   teams: TeamResult[]
@@ -56,7 +66,7 @@ export function TeamTower({
       <div className="overflow-x-auto">
         <div className="min-w-[52rem]">
           <div
-            className={`${ROW_GRID} border-b border-zinc-700 px-1.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500`}
+            className={`${rowGrid(laps)} border-b border-zinc-700 px-1.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500`}
           >
             <div />
             <div className="text-center">P</div>
@@ -64,10 +74,9 @@ export function TeamTower({
             <div>Team</div>
             {Array.from({ length: laps }, (_, i) => (
               <div key={i} className="text-right">
-                Lap {i + 1}
+                {i < laps - 1 ? `Lap ${i + 1}` : 'Finish'}
               </div>
             ))}
-            <div className="text-right">Finish</div>
             <div className="text-right">Gap</div>
             <div className="px-1">Visual gap</div>
             <div className="text-center">Status</div>
@@ -82,7 +91,7 @@ export function TeamTower({
               <TeamRow
                 key={t.teamCode}
                 team={t}
-                rowGrid={ROW_GRID}
+                rowGrid={rowGrid(laps)}
                 laps={laps}
                 lapBest={lapBest}
                 scaleMs={scaleMs}
