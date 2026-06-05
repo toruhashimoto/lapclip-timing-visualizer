@@ -116,6 +116,17 @@ export const teamTTMidRows: FixtureRow[] = [
   { rank: '-', bib: '21', name: 'LI NING STAR', phase: '0周', time: '-:--:--.--', gap: '-:--' },
 ]
 
+// --- 全日本 TTT (宮崎, 14.2km × 2 = 28.4km): rows look just like 大鹿 / an ITT
+// (sub-second LAP/FINISH times), but the ctg is an alpha code (not 004), so the
+// only reliable team-TT signal is the page titling itself a チームタイムトライアル. ---
+export const JPTTT_TITLE =
+  '全日本自転車競技選手権大会 個人・チームタイムトライアル - Team Time Trial (TTT)のリザルト | LAP CLIP'
+export const jptttRows: FixtureRow[] = [
+  { rank: '1位', bib: '1', name: 'JCL TEAM UKYO', phase: 'FINISH', time: '0:34:18.20', gap: '0:00.00' },
+  { rank: '2位', bib: '2', name: 'マトリックスパワータグ', phase: 'FINISH', time: '0:34:45.60', gap: '+0:27.40' },
+  { rank: '-', bib: '3', name: '愛三工業レーシング', phase: 'LAP1', time: '0:17:30.00', gap: '-:--' },
+]
+
 // --- Road (京都ステージ shape): whole-second, FINISH + "X/Y周 SPn" phases. ---
 export const ROAD_TITLE =
   'Tour of Japan 2026 - JPF 京都ステージのリザルト | LAP CLIP'

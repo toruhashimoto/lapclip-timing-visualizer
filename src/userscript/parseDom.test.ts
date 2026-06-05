@@ -8,6 +8,7 @@ import {
   parseMassStart,
   parseRankNum,
   parseTeam,
+  teamLaps,
 } from './parseDom'
 import { normalizeRiders } from '../utils/normalizeRiders'
 import {
@@ -23,6 +24,7 @@ import {
 } from '../utils/groupRiders'
 import {
   CRIT_TITLE,
+  JPTTT_TITLE,
   PRESTART_TITLE,
   ROAD8_TITLE,
   ROAD_TITLE,
@@ -30,6 +32,7 @@ import {
   TT_TITLE,
   clearPage,
   critRows,
+  jptttRows,
   mountPage,
   preStartRows,
   road8FinalRows,
@@ -42,6 +45,8 @@ import {
 
 const CTG = (n: string) =>
   `https://matrix-sports.jp/lap/result.php?evt=2026_toj&ctg=${n}`
+const JPTT = (n: string) =>
+  `https://matrix-sports.jp/lap/result.php?evt=260607_jptt&ctg=${n}`
 
 afterEach(() => clearPage())
 
@@ -149,6 +154,41 @@ describe('detectMode (URL hint, unchanged)', () => {
   })
   it('other ctg is individual', () => {
     expect(detectMode(CTG('002'))).toBe('individual')
+  })
+})
+
+describe('全日本 TTT detection (title-based, alpha ctg)', () => {
+  it('reads team_tt from a チームタイムトライアル title despite ITT-style times', () => {
+    mountPage(JPTTT_TITLE, jptttRows)
+    // ctg is an unknown alpha code (not 004), so the URL hint can't help; the
+    // page's own title is what flags it as a team TT — and it must win over the
+    // centisecond check that would otherwise call it individual_tt.
+    expect(detectMode(JPTT('MTTT'), document)).toBe('team')
+    expect(detectRaceShape(document, JPTT('MTTT'))).toBe('team_tt')
+  })
+  it('does NOT misread an individual TT (個人) page as team', () => {
+    mountPage(TT_TITLE, ttRows)
+    expect(detectMode(JPTT('ME-T'), document)).toBe('individual')
+    expect(detectRaceShape(document, JPTT('ME-T'))).toBe('individual_tt')
+  })
+})
+
+describe('teamLaps (per-event team-TT lap count)', () => {
+  it('全日本 TTT (…_jptt) is 2 laps (14.2km × 2 = 28.4km)', () => {
+    expect(teamLaps(JPTT('MTTT'))).toBe(2)
+  })
+  it('TOJ 大鹿 (ctg=004) defaults to 3 laps (3.8km × 3)', () => {
+    expect(teamLaps(CTG('004'))).toBe(3)
+    expect(teamLaps('https://matrix-sports.jp/lap/result.php?evt=2026_toj')).toBe(3)
+  })
+  it('parseTeam honours an explicit lap count (2 slots for TTT)', () => {
+    mountPage(JPTTT_TITLE, jptttRows)
+    const data = parseTeam(document, 2)
+    expect(data.laps).toBe(2)
+    for (const t of data.teams) expect(t.lapsCumMs).toHaveLength(2)
+    const atLap1 = data.teams.find((t) => t.teamCode === '3')!
+    expect(atLap1.lapsCumMs[0]).toBe((17 * 60 + 30) * 1000) // LAP1 -> slot 0
+    expect(atLap1.lapsCumMs[1]).toBeNull()
   })
 })
 

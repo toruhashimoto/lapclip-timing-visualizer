@@ -194,13 +194,35 @@ export function parseIndividual(root: ParentNode = document): LapClipData {
   }
 }
 
-// Team TT (大鹿): one row per team showing the team's current or final time.
+// How many laps the team-TT course is run, by event. result.php never states
+// the lap count, so we key it off the event id (the loop length differs per
+// venue, not per team):
+//   • 全日本選手権 TTT (evt …_jptt) → 28.4km = 14.2km loop ×2  (2026 宮崎, 推定)
+//   • TOJ Astemo 大鹿ステージ (ctg=004) → 3.8km loop ×3
+// This sets how many "Lap N" columns the team tower draws and how many lap
+// splits enrichTeamsWithLaptimes fetches; the splits themselves come from the
+// live DOM / laptimes.php.
+export function teamLaps(href = location.href): number {
+  try {
+    const evt = new URL(href).searchParams.get('evt') ?? ''
+    if (/jptt/i.test(evt)) return 2 // 全日本 TTT: 14.2km × 2
+  } catch {
+    /* fall through to the TOJ default */
+  }
+  return 3 // 大鹿: 3.8km × 3
+}
+
+// Team TT: one row per team showing the team's current or final time.
 // Phase labels observed on the live DOM:
 //   "FINISH"  — official finish time
 //   "LAP1" / "LAP2" — cumulative time at intermediate checkpoint N
 //   "N周" (N > 0)   — alternative checkpoint notation (N laps completed)
 //   "0周"            — not yet started
-export function parseTeam(root: ParentNode = document, laps = 3): TeamData {
+// `laps` defaults to the per-event value (teamLaps): All-Japan TTT draws 2, 大鹿 3.
+export function parseTeam(
+  root: ParentNode = document,
+  laps = teamLaps(),
+): TeamData {
   const { eventName, categoryName } = eventInfo(root)
   const teams: TeamResult[] = parseEntries(root).map((e) => {
     const timeMs = parseTimeToMs(e.timeText)
@@ -348,23 +370,47 @@ export function parseMassStart(root: ParentNode = document): LapClipData {
   }
 }
 
-// Pick mode from the result.php category (ctg=004 = 大鹿 team TT). The caller can
-// override; this is just the default heuristic.
-export function detectMode(href = location.href): 'individual' | 'team' {
+// A team-TT page named in its own title/headings. TOJ 大鹿 is caught by the
+// ctg=004 URL hint, but the 全日本 TTT uses alpha ctg codes (like ME-T/MU-T for
+// the ITTs) that we can't enumerate in advance — so we read the page's own label
+// instead. The ITT event name "…個人タイムトライアル…" never contains a team
+// marker, so this stays false for individual pages.
+function looksLikeTeamTT(root: ParentNode): boolean {
+  const parts = [root.querySelector('title')?.textContent ?? document.title]
+  for (const h of Array.from(root.querySelectorAll('h1, h2, h3, .title, .category')))
+    parts.push(h.textContent ?? '')
+  const text = parts.join(' ')
+  return /チーム\s*(タイム)?トライアル|チーム\s*TT|team\s*time\s*trial|\bTTT\b/i.test(
+    text,
+  )
+}
+
+// Pick mode from the result.php category (ctg=004 = 大鹿 team TT) or the page's
+// own team-TT label (全日本 TTT). The caller can override; this is just the
+// default heuristic.
+export function detectMode(
+  href = location.href,
+  root: ParentNode = document,
+): 'individual' | 'team' {
   try {
     const ctg = new URL(href).searchParams.get('ctg') ?? ''
-    return ctg.startsWith('004') ? 'team' : 'individual'
+    if (ctg.startsWith('004')) return 'team'
   } catch {
-    return 'individual'
+    /* fall through to the content check */
   }
+  return looksLikeTeamTT(root) ? 'team' : 'individual'
 }
 
 // Detect the race shape from the page CONTENT (not just the URL), so the right
 // view is chosen for any TOJ stage — and future events — without a hard-coded
-// category map. ctg=004 (大鹿 team TT) is the one URL hint we keep, because a
-// team page is otherwise hard to tell from an individual one by content alone.
+// category map. Team TT is hard to tell from an individual TT by row content
+// alone (both are sub-second times), so it is keyed off two hints: the ctg=004
+// URL (大鹿) and the page's own team-TT title/heading (全日本 TTT). This must run
+// before the centisecond check below, which would otherwise call a TTT page
+// (sub-second LAP1/LAP2 splits) an individual_tt.
 //
 // Signals (in priority order):
+//   • ctg=004 or a team-TT title    -> team_tt (detectMode).
 //   • 1/100s times or a 中間点 phase  -> individual_tt (TTs are always sub-second).
 //   • lap-progress phases (N周 / X/Y周) -> mass_start.
 //   • whole-second times that tie across riders (bunch finish) -> mass_start.
@@ -374,7 +420,7 @@ export function detectRaceShape(
   root: ParentNode = document,
   href = location.href,
 ): RaceShape {
-  if (detectMode(href) === 'team') return 'team_tt'
+  if (detectMode(href, root) === 'team') return 'team_tt'
   const entries = parseEntries(root)
   if (entries.length === 0) return 'individual_tt'
 
