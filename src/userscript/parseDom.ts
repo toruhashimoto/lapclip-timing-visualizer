@@ -121,10 +121,29 @@ export function parseEntries(root: ParentNode = document): RawEntry[] {
     }
     if (!bib) continue
 
+    // The rider/team cell comes in three observed forms:
+    //   "[CODE]name"   — TOJ: a bracketed short team code.
+    //   "氏名/チーム名" — 全日本ロード 2026: full team name after a slash.
+    //   "氏名"          — 全日本ロード 2025: name only, no team.
     const teamNameRaw = nwb[2] ?? ''
-    const tnm = teamNameRaw.match(/^\s*[[［]([^\]］]+)[\]］]\s*(.*)$/)
-    const teamCode = tnm ? tnm[1].trim() : null
-    const name = (tnm ? tnm[2] : teamNameRaw).trim()
+    const bracket = teamNameRaw.match(/^\s*[[［]([^\]］]+)[\]］]\s*(.*)$/)
+    let teamCode: string | null
+    let name: string
+    if (bracket) {
+      teamCode = bracket[1].trim()
+      name = bracket[2].trim()
+    } else {
+      // Split on the FIRST slash (half- or full-width); the remainder is the
+      // team name. No slash → a plain name with no team.
+      const slash = teamNameRaw.search(/[/／]/)
+      if (slash >= 0) {
+        name = teamNameRaw.slice(0, slash).trim()
+        teamCode = teamNameRaw.slice(slash + 1).trim() || null
+      } else {
+        teamCode = null
+        name = teamNameRaw.trim()
+      }
+    }
     if (!name) continue
 
     const rankText = (nwb[0] ?? '').trim()
@@ -197,7 +216,8 @@ export function parseIndividual(root: ParentNode = document): LapClipData {
 // How many laps the team-TT course is run, by event. result.php never states
 // the lap count, so we key it off the event id (the loop length differs per
 // venue, not per team):
-//   • 全日本選手権 TTT (evt …_jptt) → 28.4km = 14.2km loop ×2  (2026 宮崎, 推定)
+//   • 全日本選手権 TTT (evt …_jptt) → loop ×2  (会場・周回は年度毎に当日確認;
+//     2026 宮崎=14.2km×2 の推定。値が変わる年は要見直し)
 //   • TOJ Astemo 大鹿ステージ (ctg=004) → 3.8km loop ×3
 // This sets how many "Lap N" columns the team tower draws and how many lap
 // splits enrichTeamsWithLaptimes fetches; the splits themselves come from the
@@ -329,11 +349,30 @@ export function parseMassStart(root: ParentNode = document): LapClipData {
     // count even at the end, so it never reports a finisher (source limitation).
     const isFinisher = phaseUp === 'FINISH'
 
+    // Status from the phase label. Only the confirmed ASCII abnormal codes
+    // (DNS/DNF/DNQ/DSQ) and FINISH map to a known status; a lap-progress phase
+    // ("…周") or an empty/unstamped phase is the normal running/waiting case.
+    // ANYTHING ELSE — OTL / リタイア / 降車 / a code we have not positively seen —
+    // is kept as an explicit UNKNOWN with the source's own wording intact, never
+    // guessed into DNF or RUNNING. statusText preserves the original text so the
+    // UI can show it verbatim.
     let status: RiderStatus
-    if (/^(DNS|DNF|DNQ|DSQ)$/.test(phaseUp)) status = phaseUp as RiderStatus
-    else if (isFinisher) status = 'FINISH'
-    else if (noTime) status = 'WAIT'
-    else status = 'RUNNING'
+    let statusText: string | null = null
+    if (/^(DNS|DNF|DNQ|DSQ)$/.test(phaseUp)) {
+      status = phaseUp as RiderStatus
+      statusText = e.phase
+    } else if (isFinisher) {
+      status = 'FINISH'
+    } else if (/\d\s*周/.test(e.phase) || e.phase === '') {
+      status = noTime ? 'WAIT' : 'RUNNING'
+    } else {
+      status = 'UNKNOWN'
+      statusText = e.phase
+    }
+    // For any abnormal-status row (DNS/DNF/DNQ/DSQ/UNKNOWN) the phase is a label,
+    // not a checkpoint, so don't let parseLapPhase's tail fallback leak it into
+    // the SPn/KOM checkpoint field (which feeds passedCheckpoints / the badge).
+    const checkpoint = statusText != null ? null : lastCheckpoint
 
     return {
       rank: null,
@@ -341,6 +380,7 @@ export function parseMassStart(root: ParentNode = document): LapClipData {
       teamCode: e.teamCode,
       name: e.name,
       status,
+      statusText,
       intermediateText: null,
       intermediateMs: null,
       // Reuse finishMs so the diff/feed/highlight logic sees finishers too.
@@ -353,7 +393,7 @@ export function parseMassStart(root: ParentNode = document): LapClipData {
       elapsedMs,
       lapsDone,
       lapsTotal: total,
-      lastCheckpoint,
+      lastCheckpoint: checkpoint,
       lapsDown,
       isFinisher,
     }
@@ -385,6 +425,20 @@ function looksLikeTeamTT(root: ParentNode): boolean {
   )
 }
 
+// The mirror of looksLikeTeamTT for the other unambiguous case: a page that
+// titles itself a ロード・レース (road race) and does NOT mention a time trial is
+// a mass-start road race. Keyed off the page's own title — the 全日本 road event
+// id (…_jprr) is never inspected — so it also covers future road events. The TT
+// exclusion keeps 個人/チーム TT titles (which never say ロード・レース) on their
+// own paths.
+function looksLikeRoadRace(root: ParentNode): boolean {
+  const title = root.querySelector('title')?.textContent ?? document.title ?? ''
+  const isRoad = /ロード\s*[・･]?\s*レース/.test(title)
+  const mentionsTT =
+    /タイムトライアル|team\s*time\s*trial|\bTTT\b|\bITT\b|\bTT\b/i.test(title)
+  return isRoad && !mentionsTT
+}
+
 // Pick mode from the result.php category (ctg=004 = 大鹿 team TT) or the page's
 // own team-TT label (全日本 TTT). The caller can override; this is just the
 // default heuristic.
@@ -411,6 +465,9 @@ export function detectMode(
 //
 // Signals (in priority order):
 //   • ctg=004 or a team-TT title    -> team_tt (detectMode).
+//   • a ロード・レース title (no TT wording) -> mass_start (looksLikeRoadRace);
+//     pinned before the sub-second check so a sparse/odd road page can't slip
+//     through to individual_tt.
 //   • 1/100s times or a 中間点 phase  -> individual_tt (TTs are always sub-second).
 //   • lap-progress phases (N周 / X/Y周) -> mass_start.
 //   • whole-second times that tie across riders (bunch finish) -> mass_start.
@@ -421,6 +478,12 @@ export function detectRaceShape(
   href = location.href,
 ): RaceShape {
   if (detectMode(href, root) === 'team') return 'team_tt'
+  // An explicit ロード・レース title (without any time-trial wording) is a
+  // mass-start road race — pinned here, before the content heuristics, so a
+  // pre-start / sparse / oddly-timed road page can't fall through to
+  // individual_tt. For normal road data (whole-second times + N周) this simply
+  // agrees with the content signals below.
+  if (looksLikeRoadRace(root)) return 'mass_start'
   const entries = parseEntries(root)
   if (entries.length === 0) return 'individual_tt'
 

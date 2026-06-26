@@ -183,6 +183,9 @@ function renderSituation(data: LapClipData): HTMLElement {
 }
 
 function progressText(r: RiderResult): string {
+  // Abnormal rows (DNS/DNF/DNQ/DSQ/UNKNOWN) carry the source's own label — show
+  // it verbatim instead of a lap count it doesn't have.
+  if (r.statusText) return r.statusText
   const sp =
     r.lastCheckpoint && r.lastCheckpoint !== 'FINISH' ? ` ${r.lastCheckpoint}` : ''
   if (r.lapsDone != null && r.lapsTotal != null) return `${r.lapsDone}/${r.lapsTotal}${sp}`

@@ -63,6 +63,14 @@ function MassStatusBadge({ rider }: { rider: RiderResult }) {
         出走前
       </span>
     )
+  // An unconfirmed / atypical status (OTL / リタイア / 降車 / …): show the
+  // source's own wording verbatim rather than guessing it into RACING.
+  if (s === 'UNKNOWN')
+    return (
+      <span className="rounded bg-amber-950 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+        {rider.statusText ?? '?'}
+      </span>
+    )
   return (
     <span className="inline-flex items-center gap-1 rounded bg-sky-950 px-1.5 py-0.5 text-[10px] font-semibold text-sky-300">
       <span className="lc-pulse h-1.5 w-1.5 rounded-full bg-sky-400" />

@@ -69,6 +69,11 @@ export type RiderResult = {
   lapsDown?: number | null
   // True once the rider has finished (gap is a time, not "-N周", or phase=FINISH).
   isFinisher?: boolean
+  // Raw status/phase label kept verbatim when the row carries an abnormal status
+  // — the confirmed codes (DNS/DNF/DNQ/DSQ) or an UNKNOWN one (e.g. the source's
+  // own "OTL" / "リタイア" / "降車" wording). Lets the UI show the source text
+  // as-is instead of guessing. Null for normal RUNNING / FINISH / WAIT rows.
+  statusText?: string | null
   // On-course bucket for the live race-situation view (derived, mass-start only).
   group?: RiderGroup
 
