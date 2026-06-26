@@ -28,6 +28,11 @@ import {
   mockRoadLiveData,
 } from './mockMassData'
 import { mockTeamData, mockTeamDataNext } from './mockTeamData'
+import {
+  JPRR_CATEGORIES,
+  mockJprrData,
+  type JprrCategoryKey,
+} from './mockJprrData'
 import { diffData } from './utils/diff'
 import { diffTeams } from './utils/diffTeams'
 import { normalizeRiders } from './utils/normalizeRiders'
@@ -37,6 +42,7 @@ import { ControlPanel } from './components/ControlPanel'
 import { ErrorBanner } from './components/ErrorBanner'
 import { Header } from './components/Header'
 import { HighlightPanel } from './components/HighlightPanel'
+import { CategoryTabs } from './components/CategoryTabs'
 import { MassStartTower } from './components/MassStartTower'
 import { RaceSituation } from './components/RaceSituation'
 import { TeamHighlightPanel } from './components/TeamHighlightPanel'
@@ -44,17 +50,22 @@ import { TeamTower } from './components/TeamTower'
 import { TimingTower } from './components/TimingTower'
 import { UpdateFeed } from './components/UpdateFeed'
 
-// SPA preview can start on a mass-start demo via ?mock=criterium | road.
-function initialDemo(): LapClipData {
+function mockParam(): string | null {
   try {
-    const m = new URL(location.href).searchParams.get('mock')
-    if (m === 'criterium' || m === 'crit') return mockCriteriumData
-    if (m === 'road') return mockRoadData
-    if (m === 'live') return mockRoadLiveData
-    if (m === 'prestart') return mockPreStartData
+    return new URL(location.href).searchParams.get('mock')
   } catch {
-    /* ignore */
+    return null
   }
+}
+
+// SPA preview can start on a mass-start demo via ?mock=criterium | road | jprr.
+function initialDemo(): LapClipData {
+  const m = mockParam()
+  if (m === 'criterium' || m === 'crit') return mockCriteriumData
+  if (m === 'road') return mockRoadData
+  if (m === 'live') return mockRoadLiveData
+  if (m === 'prestart') return mockPreStartData
+  if (m === 'jprr') return mockJprrData('ME')
   return mockData
 }
 
@@ -202,6 +213,9 @@ export default function App() {
     ...loadLS<Partial<Settings>>(LS.settings, {}),
   }))
   const [data, setData] = useState<LapClipData>(() => ingest(initialDemo(), null).data)
+  // ?mock=jprr preview: All-Japan road with selectable category tabs.
+  const [jprrMode] = useState(() => mockParam() === 'jprr')
+  const [jprrCat, setJprrCat] = useState<JprrCategoryKey>('ME')
   const [previousData, setPreviousData] = useState<LapClipData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -330,6 +344,17 @@ export default function App() {
 
   const handleModeChange = useCallback((m: Mode) => {
     setSettings((s) => ({ ...s, mode: m }))
+    setFeed([])
+    setLatestFinishKey(null)
+    setError(null)
+  }, [])
+
+  // Switch the ?mock=jprr preview to another category's synthetic field.
+  const handleJprrCategory = useCallback((key: JprrCategoryKey) => {
+    setJprrCat(key)
+    setPreviousData(null)
+    setData(ingest(mockJprrData(key), null).data)
+    setUsingMock(true)
     setFeed([])
     setLatestFinishKey(null)
     setError(null)
@@ -545,6 +570,14 @@ export default function App() {
             lastFetchedAt={data?.fetchedAt ?? null}
             onRetry={() => fetchLive(sourceUrl)}
             onDismiss={() => setError(null)}
+          />
+        )}
+
+        {jprrMode && !teamMode && (
+          <CategoryTabs
+            categories={JPRR_CATEGORIES}
+            active={jprrCat}
+            onSelect={handleJprrCategory}
           />
         )}
 

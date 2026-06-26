@@ -4,7 +4,7 @@ import { parseTimeToMs } from './utils/parseTime'
 // Synthetic mass-start demo data (criterium + road) for the SPA preview. Real
 // formats, fabricated riders/times — no LapClip data is stored here.
 
-type MS = {
+export type MS = {
   rank: number
   bib: string
   team: string
@@ -19,17 +19,21 @@ type MS = {
   status?: RiderStatus
 }
 
-function ms(o: MS): RiderResult {
+export function ms(o: MS): RiderResult {
   const elapsedMs = parseTimeToMs(o.elapsed)
   const lapsDown = o.lapsDown ?? null
   const gapMs = lapsDown == null && o.gap != null ? parseTimeToMs(o.gap) : null
   const finisher = o.finisher ?? lapsDown == null
+  const status: RiderStatus = o.status ?? (finisher ? 'FINISH' : 'RUNNING')
+  // Mirror the parser: abnormal statuses carry their label so the UI shows it.
+  const statusText = /^(DNS|DNF|DNQ|DSQ|UNKNOWN)$/.test(status) ? status : null
   return {
     rank: null,
     bib: o.bib,
     teamCode: o.team,
     name: o.name,
-    status: o.status ?? (finisher ? 'FINISH' : 'RUNNING'),
+    status,
+    statusText,
     intermediateText: null,
     intermediateMs: null,
     finishText: finisher ? o.elapsed : null,
