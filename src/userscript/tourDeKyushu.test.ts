@@ -10,7 +10,7 @@
 // All riders, teams and times are SYNTHETIC (see __fixtures__/lapclipHtml.ts).
 import { afterEach, describe, expect, it } from 'vitest'
 import { detectRaceShape, parseEntries, parseMassStart } from './parseDom'
-import { normalizeMassStart, isRaceOver } from '../utils/normalizeMassStart'
+import { normalizeMassStart, isRaceOver, leaderLap } from '../utils/normalizeMassStart'
 import { raceSummary } from '../utils/groupRiders'
 import { clearPage, mountPage, type FixtureRow } from './__fixtures__/lapclipHtml'
 
@@ -176,5 +176,20 @@ describe('Tour de Kyushu — official-result shaping', () => {
     expect(lapped.status).toBe('RUNNING')
     expect(lapped.rank).toBe(3)
     expect(lapped.lapsDown).toBe(2)
+  })
+})
+
+describe('Tour de Kyushu — leader lap counter', () => {
+  it('a finished criterium reports the full distance (lapsDone + lapsDown), not the lapped riders\' lap', () => {
+    mountPage(CRIT_TITLE, critFinal)
+    const d = parseMassStart()
+    // Crit G: 28周 -2周 → the race was 30 laps.
+    expect(leaderLap(normalizeMassStart(d.riders), d.lapsTotal ?? null)).toBe(30)
+  })
+
+  it('mid-race it is the leader\'s lap', () => {
+    mountPage(CRIT_TITLE, critLive)
+    const d = parseMassStart()
+    expect(leaderLap(normalizeMassStart(d.riders), d.lapsTotal ?? null)).toBe(20)
   })
 })

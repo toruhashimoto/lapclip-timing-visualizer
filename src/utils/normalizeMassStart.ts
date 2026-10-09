@@ -115,16 +115,25 @@ export function leadLapCount(riders: RiderResult[]): number {
   return riders.filter((r) => r.lapsDown == null && r.elapsedMs != null).length
 }
 
-// The leader's lap, for the header lap counter. A finisher (road race) has no
-// lapsDone but has completed the full distance, so count them as lapsTotal.
+// The leader's lap, for the header lap counter. A finisher has no lapsDone but
+// has completed the full distance, so count them as lapsTotal. A criterium page
+// never states the total ("N周" only), so infer it from the lapped riders: a
+// rider on "28周" who is "-2周" was lapped on a 30-lap race (lapsDone + lapsDown).
 export function leaderLap(
   riders: RiderResult[],
   lapsTotal: number | null,
 ): number | null {
+  let inferred: number | null = null
+  for (const r of riders)
+    if (r.lapsDone != null) {
+      const lap = r.lapsDone + (r.lapsDown ?? 0)
+      if (inferred == null || lap > inferred) inferred = lap
+    }
+  const total = lapsTotal ?? inferred
   let max: number | null = null
   for (const r of riders) {
     const lap =
-      r.lapsDone ?? (r.isFinisher && lapsTotal != null ? lapsTotal : null)
+      r.lapsDone ?? (r.isFinisher && total != null ? total : null)
     if (lap != null && (max == null || lap > max)) max = lap
   }
   return max
