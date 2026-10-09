@@ -1,24 +1,14 @@
 import type { TeamResult } from '../types'
-import { parseTimeToMs } from '../utils/parseTime'
+import { parseLapRows } from '../analysis/laptimesRows'
 
-// Parse a laptimes.php document into cumulative lap times.
-// Table row: <td.syukai>N/M周|FINISH</td>  <td.total>H:MM:SS.ss</td>
+// Parse a laptimes.php document into cumulative lap times (team TT).
+// Row parsing is shared with the analysis page (parseLapRows).
 export function parseLaptimesDoc(doc: Document, laps: number): (number | null)[] {
   const lapsCumMs: (number | null)[] = new Array(laps).fill(null)
-  for (const row of Array.from(doc.querySelectorAll('table tr')).slice(1)) {
-    const phase = row.querySelector('.syukai')?.textContent?.trim()
-    const totalMs = parseTimeToMs(row.querySelector('.total')?.textContent?.trim() ?? '')
-    if (!phase || totalMs == null) continue
-    if (/^FINISH$/i.test(phase)) {
-      lapsCumMs[laps - 1] = totalMs
-    } else {
-      // "N/M周" or "N周" — N is the lap number (1-based)
-      const m = phase.match(/^(\d+)/)
-      if (m) {
-        const idx = Number(m[1]) - 1
-        if (idx >= 0 && idx < laps) lapsCumMs[idx] = totalMs
-      }
-    }
+  for (const r of parseLapRows(doc)) {
+    if (r.cumMs == null) continue
+    if (r.lap === 'FINISH') lapsCumMs[laps - 1] = r.cumMs
+    else if (r.lap >= 1 && r.lap <= laps) lapsCumMs[r.lap - 1] = r.cumMs
   }
   return lapsCumMs
 }
