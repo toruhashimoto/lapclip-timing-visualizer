@@ -25,6 +25,10 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # The action's default ("tools platform-tools") fails since the legacy
+          # 'tools' package was dropped from the SDK repository.
+          packages: platform-tools
 
       - name: Generate Gradle wrapper
         working-directory: android
