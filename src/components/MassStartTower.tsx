@@ -40,7 +40,7 @@ export function MassStartTower({
           Classification
         </h2>
         <span className="text-[10px] text-zinc-500">
-          着順は公式リザルト（位）に準拠
+          着順は公式リザルト（位）に準拠・完走タイムはUCI 3秒ルールで集団同タイム（推定）
         </span>
       </div>
       <div className="overflow-x-auto">

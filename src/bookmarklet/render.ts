@@ -236,7 +236,13 @@ export function renderMassStart(data: LapClipData): HTMLElement {
         h('td', { class: 'team' }, r.teamCode ?? ''),
         h('td', { class: 'name' }, r.name),
         h('td', { class: 'r mono' }, progressText(r)),
-        h('td', { class: 'r mono' }, formatDurationWhole(r.elapsedMs)),
+        h(
+          'td',
+          r.isFinisher && r.elapsedText
+            ? { class: 'r mono', title: `LapClip計測 ${r.elapsedText}` }
+            : { class: 'r mono' },
+          formatDurationWhole(r.elapsedMs),
+        ),
         gapCell,
         h(
           'td',

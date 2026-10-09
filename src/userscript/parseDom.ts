@@ -147,9 +147,15 @@ export function parseEntries(root: ParentNode = document): RawEntry[] {
     if (!name) continue
 
     const rankText = (nwb[0] ?? '').trim()
-    const phase = (nw[0] ?? '').trim()
-    const timeText = (nw[1] ?? '').trim()
-    const gapText = (nw[2] ?? '').replace(/.*Top\s*[:：]\s*/, '').trim() || null
+    // An untimed row (pre-start start list, or a non-finisher after the race —
+    // ツール・ド・九州 2025/2026) drops the phase span entirely and shows only
+    // ["-:--:--.--", "+Top : …"]. Read that as time + gap with an empty phase
+    // instead of mistaking the placeholder time for a phase label.
+    const noPhase = nw.length === 2 && /Top\s*[:：]/.test(nw[1])
+    const phase = noPhase ? '' : (nw[0] ?? '').trim()
+    const timeText = (noPhase ? nw[0] : nw[1] ?? '').trim()
+    const gapText =
+      (noPhase ? nw[1] : nw[2] ?? '').replace(/.*Top\s*[:：]\s*/, '').trim() || null
 
     const key = `${bib}-${teamCode ?? ''}-${name}`
     if (seen.has(key)) continue
@@ -175,7 +181,7 @@ function eventInfo(root: ParentNode): {
     root.querySelectorAll('h1, h2, h3, .title, .category'),
   )) {
     const t = (h.textContent ?? '').replace(/\s+/g, ' ').trim()
-    if (t && /ステージ|カテゴリ|stage|category/i.test(t)) {
+    if (t && /ステージ|カテゴリ|クリテリウム|stage|category/i.test(t)) {
       categoryName = t
       break
     }
@@ -439,6 +445,28 @@ function looksLikeRoadRace(root: ParentNode): boolean {
   return isRoad && !mentionsTT
 }
 
+// Events whose every category is a mass start, keyed off the result.php `evt`.
+//   • tdk… = マイナビ ツール・ド・九州 (佐世保クリテリウム + road stages 1–3; no TT).
+// Needed because Tour de Kyushu times its road stages to 1/100s, so a finished
+// stage (all FINISH, centisecond times, no lap phase) is otherwise
+// indistinguishable from an individual TT by content alone.
+function isMassStartEvent(href: string): boolean {
+  try {
+    const evt = new URL(href).searchParams.get('evt') ?? ''
+    return /^tdk/i.test(evt)
+  } catch {
+    return false
+  }
+}
+
+// A criterium page names itself in its title or category heading.
+function looksLikeCriterium(root: ParentNode): boolean {
+  const parts = [root.querySelector('title')?.textContent ?? document.title ?? '']
+  for (const h of Array.from(root.querySelectorAll('h1, h2, h3, .title, .category')))
+    parts.push(h.textContent ?? '')
+  return /クリテリウム|criterium/i.test(parts.join(' '))
+}
+
 // Pick mode from the result.php category (ctg=004 = 大鹿 team TT) or the page's
 // own team-TT label (全日本 TTT). The caller can override; this is just the
 // default heuristic.
@@ -468,6 +496,9 @@ export function detectMode(
 //   • a ロード・レース title (no TT wording) -> mass_start (looksLikeRoadRace);
 //     pinned before the sub-second check so a sparse/odd road page can't slip
 //     through to individual_tt.
+//   • evt=tdk… (ツール・ド・九州) or a クリテリウム title/heading -> mass_start.
+//   • a lapped gap (-N周) or an X/Y周 phase -> mass_start (TTs never show these;
+//     checked before the sub-second rule since some mass starts are 1/100s timed).
 //   • 1/100s times or a 中間点 phase  -> individual_tt (TTs are always sub-second).
 //   • lap-progress phases (N周 / X/Y周) -> mass_start.
 //   • whole-second times that tie across riders (bunch finish) -> mass_start.
@@ -484,8 +515,15 @@ export function detectRaceShape(
   // individual_tt. For normal road data (whole-second times + N周) this simply
   // agrees with the content signals below.
   if (looksLikeRoadRace(root)) return 'mass_start'
+  if (isMassStartEvent(href) || looksLikeCriterium(root)) return 'mass_start'
   const entries = parseEntries(root)
   if (entries.length === 0) return 'individual_tt'
+
+  // Signals only a mass start can produce. Checked before the centisecond rule
+  // because some organisers (ツール・ド・九州) time mass starts to 1/100s too.
+  const hasLappedGap = entries.some((e) => /^-\s*\d+\s*周/.test(e.gapText ?? ''))
+  const hasFracLap = entries.some((e) => /\d+\s*\/\s*\d+\s*周/.test(e.phase))
+  if (hasLappedGap || hasFracLap) return 'mass_start'
 
   const hasCentiseconds = entries.some((e) => /\d\.\d{2}\b/.test(e.timeText))
   const hasMidpoint = entries.some((e) => e.phase.includes('中間'))

@@ -182,7 +182,14 @@ export function MassStartRow({
       </div>
 
       {/* Elapsed time at the current checkpoint */}
-      <div className="text-right font-mono tabular-nums">
+      <div
+        className="text-right font-mono tabular-nums"
+        title={
+          rider.isFinisher && rider.elapsedText
+            ? `LapClip計測 ${rider.elapsedText}（表示は集団同タイム・秒切捨て）`
+            : undefined
+        }
+      >
         {rider.elapsedMs != null ? (
           <span className={isLeader ? 'text-amber-200' : 'text-zinc-100'}>
             {formatDurationWhole(rider.elapsedMs)}

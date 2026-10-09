@@ -1,4 +1,5 @@
 import type { RiderResult } from '../types'
+import { isRaceOver } from './normalizeMassStart'
 
 // Live race-situation grouping for a mass-start race. Riders on the lead lap are
 // clustered into on-road groups by their time gap to the leader: a sustained
@@ -83,8 +84,8 @@ export function passedCheckpoints(riders: RiderResult[]): string[] {
 export type RaceSummary = {
   finished: boolean
   finishers: number
-  nonFinishers: number // abandons / lapped / not classified
-  leadBunch: number // finishers on the winner's time (gap ≤ 1s) = the front group
+  nonFinishers: number // abandons / lapped (DNF) / not classified
+  leadBunch: number // finishers on the winner's time (same-time rule) = the front group
   winner: RiderResult | null
 }
 
@@ -92,9 +93,14 @@ export function raceSummary(riders: RiderResult[]): RaceSummary {
   const finishers = riders.filter((r) => r.isFinisher)
   // FINISH is the only sure end signal; a criterium never reports it, so it
   // simply never flips to the summary (stays on the live group view).
-  const finished = riders.length > 0 && finishers.length >= riders.length / 2
+  // Also over once nobody is left on the lead lap — a criterium that pulls
+  // lapped riders ends with far fewer than half the field classified.
+  const finished =
+    riders.length > 0 &&
+    (finishers.length >= riders.length / 2 || isRaceOver(riders))
+  // Finishers given the winner's time under the same-time rule.
   const leadBunch = finishers.filter(
-    (r) => r.gapMs != null && r.gapMs <= 1000,
+    (r) => r.gapMs != null && r.gapMs <= 0,
   ).length
   const winner =
     finishers.find((r) => r.rank === 1) ?? finishers[0] ?? null
