@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { detectEvents } from '../../analysis/events'
+import { detectEvents, filterEvents } from '../../analysis/events'
 import type { LoadFn, LoadProgress } from '../../analysis/fetchLapHistory'
 import { DEFAULT_THRESHOLD_MS, groupsByLap } from '../../analysis/groups'
 import type { Group, LapHistory } from '../../analysis/types'
@@ -29,6 +29,7 @@ export function AnalysisView({ load, favorites, onToggleFavorite, enabled, disab
   const [error, setError] = useState<string | null>(null)
   const [thresholdMs, setThresholdMs] = useState(DEFAULT_THRESHOLD_MS)
   const [persistentOnly, setPersistentOnly] = useState(false)
+  const [majorOnly, setMajorOnly] = useState(true)
   const [highlightLap, setHighlightLap] = useState<number | null>(null)
   const abort = useRef<AbortController | null>(null)
 
@@ -60,6 +61,10 @@ export function AnalysisView({ load, favorites, onToggleFavorite, enabled, disab
     [history, thresholdMs],
   )
   const events = useMemo(() => (history ? detectEvents(history, byLap) : []), [history, byLap])
+  const shownEvents = useMemo(
+    () => filterEvents(events, { persistentOnly, majorOnly }),
+    [events, persistentOnly, majorOnly],
+  )
   const selected = useMemo(
     () => (history ? history.riders.filter((r) => favorites.has(riderKey(r))).map((r) => r.bib).slice(0, MAX_COLORED) : []),
     [history, favorites],
@@ -127,13 +132,15 @@ export function AnalysisView({ load, favorites, onToggleFavorite, enabled, disab
               集団タイムライン <span className="normal-case text-zinc-500">（縦＝先頭との差・帯の太さ＝人数・◆分断 ●合流 ×除外）</span>
             </h2>
             <div className="p-2">
-              <GroupTimeline history={history} byLap={byLap} events={events} selected={selected} highlightLap={highlightLap} />
+              <GroupTimeline history={history} byLap={byLap} events={shownEvents} selected={selected} highlightLap={highlightLap} />
             </div>
           </section>
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <SplitEventList
-              history={history} events={events} selected={selected}
+              history={history} events={shownEvents} selected={selected}
               persistentOnly={persistentOnly} onTogglePersistent={() => setPersistentOnly((v) => !v)}
+              majorOnly={majorOnly} onToggleMajor={() => setMajorOnly((v) => !v)}
+              hiddenCount={events.length - shownEvents.length}
               onSelectLap={(lap) => setHighlightLap((cur) => (cur === lap ? null : lap))}
               onToggleRider={toggleRider} highlightLap={highlightLap}
             />

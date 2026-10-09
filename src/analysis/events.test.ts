@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifySplit, detectEvents } from './events'
+import { classifySplit, detectEvents, filterEvents } from './events'
 import { groupsByLap } from './groups'
 import { mockLapHistory } from './mockLapHistory'
 import type { MergeEvent, PulledEvent, SplitEvent } from './types'
@@ -64,5 +64,24 @@ describe('detectEvents on the synthetic race', () => {
   it('returns events in lap order', () => {
     const laps = run().map((e) => e.lap)
     expect(laps).toEqual([...laps].sort((a, b) => a - b))
+  })
+})
+
+describe('filterEvents', () => {
+  it('majorOnly keeps 中切れ / 抜け出し splits and merges, drops 脱落 and pulled', () => {
+    const ev = filterEvents(run(), { persistentOnly: false, majorOnly: true })
+    expect(ev.map((e) => (e.type === 'split' ? e.kind : e.type))).toEqual(['中切れ', 'merge', '抜け出し'])
+  })
+
+  it('persistentOnly drops transient splits', () => {
+    const all = run(6300)
+    const kept = filterEvents(all, { persistentOnly: true, majorOnly: false })
+    expect(splits(all).some((e) => e.transient)).toBe(true)
+    expect(splits(kept).some((e) => e.transient)).toBe(false)
+  })
+
+  it('no filters returns everything', () => {
+    const all = run()
+    expect(filterEvents(all, { persistentOnly: false, majorOnly: false })).toEqual(all)
   })
 })

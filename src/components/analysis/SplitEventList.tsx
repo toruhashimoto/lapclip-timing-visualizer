@@ -7,6 +7,9 @@ type Props = {
   selected: string[]
   persistentOnly: boolean
   onTogglePersistent: () => void
+  majorOnly: boolean
+  onToggleMajor: () => void
+  hiddenCount: number
   onSelectLap: (lap: number) => void
   onToggleRider: (bib: string) => void
   highlightLap: number | null
@@ -17,10 +20,11 @@ const s1 = (ms: number) => `+${(ms / 1000).toFixed(1)}s`
 // ② Event list in lap order. A / B are the riders on either side of the gap
 // (B = first behind it); clicking a row highlights that lap in the timeline.
 export function SplitEventList({
-  history, events, selected, persistentOnly, onTogglePersistent, onSelectLap, onToggleRider, highlightLap,
+  history, events, selected, persistentOnly, onTogglePersistent, majorOnly, onToggleMajor, hiddenCount,
+  onSelectLap, onToggleRider, highlightLap,
 }: Props) {
   const names = new Map(history.riders.map((r) => [r.bib, r.name]))
-  const shown = events.filter((e) => !(persistentOnly && e.type === 'split' && e.transient))
+  const shown = events // already filtered by AnalysisView (shared with the timeline)
 
   const Rider = ({ bib, strong }: { bib: string; strong?: boolean }) => {
     const ci = selected.indexOf(bib)
@@ -43,10 +47,17 @@ export function SplitEventList({
     <section className="rounded-xl border border-zinc-800 bg-zinc-900/50">
       <div className="flex items-center justify-between gap-2 border-b border-zinc-800 px-3 py-2">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">中切れイベント</h2>
-        <label className="flex items-center gap-1 text-[11px] text-zinc-400">
-          <input type="checkbox" checked={persistentOnly} onChange={onTogglePersistent} />
-          持続のみ
-        </label>
+        <div className="flex items-center gap-3 text-[11px] text-zinc-400">
+          <label className="flex items-center gap-1" title="脱落（後ろ側3名以下）と除外を隠す">
+            <input type="checkbox" checked={majorOnly} onChange={onToggleMajor} />
+            主要のみ（中切れ・抜け出し・合流）
+          </label>
+          <label className="flex items-center gap-1" title="翌周に合流した分断を隠す">
+            <input type="checkbox" checked={persistentOnly} onChange={onTogglePersistent} />
+            持続のみ
+          </label>
+          {hiddenCount > 0 && <span className="text-zinc-500">非表示 {hiddenCount}件</span>}
+        </div>
       </div>
       <p className="border-b border-zinc-800/60 px-3 py-1.5 text-[10px] text-zinc-500">
         計測はフィニッシュラインで周1回。「L周」は L周目の途中で発生し L周目通過で確認。A/B は切れ目の前後の選手（B＝後ろ側の先頭）。

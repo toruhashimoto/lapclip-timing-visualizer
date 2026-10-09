@@ -117,3 +117,21 @@ export function detectEvents(
   const order = { split: 0, merge: 1, pulled: 2 } as const
   return events.sort((x, y) => x.lap - y.lap || order[x.type] - order[y.type])
 }
+
+export type EventFilter = {
+  persistentOnly: boolean // hide splits that rejoined on the next measured lap
+  majorOnly: boolean // keep only 中切れ / 抜け出し splits and merges
+}
+
+// List/timeline filter. A real criterium yields dozens of single-rider 脱落
+// and 除外 events; majorOnly keeps the moves that shape the race.
+export function filterEvents(events: RaceEvent[], f: EventFilter): RaceEvent[] {
+  return events.filter((e) => {
+    if (e.type === 'split') {
+      if (f.persistentOnly && e.transient) return false
+      if (f.majorOnly && e.kind === '脱落') return false
+      return true
+    }
+    return !(f.majorOnly && e.type === 'pulled')
+  })
+}
