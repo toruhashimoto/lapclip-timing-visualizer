@@ -18,8 +18,11 @@ import { TimingTower } from '../components/TimingTower'
 import { MassStartTower } from '../components/MassStartTower'
 import { RaceSituation } from '../components/RaceSituation'
 import { TeamTower } from '../components/TeamTower'
+import { AnalysisView } from '../components/analysis/AnalysisView'
+import { fetchLapHistory, type LoadFn } from '../analysis/fetchLapHistory'
 import {
   detectRaceShape,
+  parseEntries,
   parseIndividual,
   parseMassStart,
   parseTeam,
@@ -89,8 +92,10 @@ function ingestTeam(raw: TeamData, prev: TeamData | null): TeamData {
   return { ...normalized, teams }
 }
 
-// The F1-style overlay. All data comes from the live page DOM (parseDom); there
-// is NO network access here. `onHide` reveals the original LapClip page.
+// The F1-style overlay. Timing data comes from the live page DOM (parseDom).
+// Network access is limited to same-origin public LapClip pages read on demand:
+// team-TT lap splits (laptimes.php) and the analysis tab (button-triggered).
+// `onHide` reveals the original LapClip page.
 export function Overlay({ onHide }: { onHide: () => void }) {
   const [modeSetting, setModeSetting] = useState<ModeSetting>(() =>
     loadLS<ModeSetting>(LS.mode, 'auto'),
@@ -265,6 +270,16 @@ export function Overlay({ onHide }: { onHide: () => void }) {
     [data],
   )
 
+  // Analysis tab (mass-start lap races only). Kept mounted while hidden so a
+  // loaded history survives switching back to the timing view.
+  const [view, setView] = useState<'timing' | 'analysis'>('timing')
+  const analysisEnabled = massStart && (leaderLapsDone ?? 0) >= 3
+  const loadHistory: LoadFn = useCallback((onProgress, signal) => {
+    const { evt, ctg } = evtCtgFromUrl()
+    const firstPage = parseEntries().map((e) => ({ bib: e.bib, name: e.name, teamCode: e.teamCode }))
+    return fetchLapHistory({ evt, ctg, firstPage, signal, onProgress })
+  }, [])
+
   const toggle = (setter: Dispatch<SetStateAction<string[]>>, value: string) =>
     setter((arr) =>
       arr.includes(value) ? arr.filter((x) => x !== value) : [...arr, value],
@@ -323,48 +338,76 @@ export function Overlay({ onHide }: { onHide: () => void }) {
       />
 
       <main className="mx-auto w-full max-w-[1600px] flex-1 p-3">
-        {noData && parsedOnce ? (
-          <p className="px-3 py-12 text-center text-sm text-zinc-500">
-            この公式ページから読み取れる結果がまだありません。レースが始まり公式ページが更新されると、自動で表示されます。
-          </p>
-        ) : teamMode ? (
-          <TeamTower
-            teams={teamData?.teams ?? []}
-            laps={teamData?.laps ?? 3}
-            scaleMs={scaleMsTeam}
-            favorites={favoriteTeamsSet}
-            onToggleFavorite={(c) => toggle(setFavoriteTeams, c)}
-            nonce={nonce}
-          />
-        ) : massStart ? (
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
-            <div className="order-2 lg:order-1">
-              <MassStartTower
-                riders={data?.riders ?? []}
-                lapsTotal={data?.lapsTotal ?? null}
-                favorites={favoritesSet}
-                onToggleFavorite={(k) => toggle(setFavorites, k)}
-                nonce={nonce}
-              />
-            </div>
-            <div className="order-1 lg:order-2">
-              <RaceSituation
-                riders={data?.riders ?? []}
-                lapsTotal={data?.lapsTotal ?? null}
-                lapsLeader={leaderLapsDone}
-                favorites={favoritesSet}
-              />
-            </div>
+        {massStart && (
+          <div className="mb-3 flex gap-1 border-b border-zinc-800">
+            {(['timing', 'analysis'] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={`-mb-px border-b-2 px-3 py-1.5 text-xs font-semibold ${
+                  view === v ? 'border-violet-500 text-zinc-100' : 'border-transparent text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                {v === 'timing' ? 'タイミング' : '分析'}
+              </button>
+            ))}
           </div>
-        ) : (
-          <TimingTower
-            riders={data?.riders ?? []}
-            scaleMs={scaleMs}
-            favorites={favoritesSet}
-            onToggleFavorite={(k) => toggle(setFavorites, k)}
-            nonce={nonce}
-          />
         )}
+        {massStart && (
+          <div className={view === 'analysis' ? '' : 'hidden'}>
+            <AnalysisView
+              load={loadHistory}
+              favorites={favoritesSet}
+              onToggleFavorite={(k) => toggle(setFavorites, k)}
+              enabled={analysisEnabled}
+              disabledReason="分析は周回レース（先頭が3周以上のマススタート）で利用できます。"
+            />
+          </div>
+        )}
+        <div className={massStart && view === 'analysis' ? 'hidden' : ''}>
+          {noData && parsedOnce ? (
+            <p className="px-3 py-12 text-center text-sm text-zinc-500">
+              この公式ページから読み取れる結果がまだありません。レースが始まり公式ページが更新されると、自動で表示されます。
+            </p>
+          ) : teamMode ? (
+            <TeamTower
+              teams={teamData?.teams ?? []}
+              laps={teamData?.laps ?? 3}
+              scaleMs={scaleMsTeam}
+              favorites={favoriteTeamsSet}
+              onToggleFavorite={(c) => toggle(setFavoriteTeams, c)}
+              nonce={nonce}
+            />
+          ) : massStart ? (
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
+              <div className="order-2 lg:order-1">
+                <MassStartTower
+                  riders={data?.riders ?? []}
+                  lapsTotal={data?.lapsTotal ?? null}
+                  favorites={favoritesSet}
+                  onToggleFavorite={(k) => toggle(setFavorites, k)}
+                  nonce={nonce}
+                />
+              </div>
+              <div className="order-1 lg:order-2">
+                <RaceSituation
+                  riders={data?.riders ?? []}
+                  lapsTotal={data?.lapsTotal ?? null}
+                  lapsLeader={leaderLapsDone}
+                  favorites={favoritesSet}
+                />
+              </div>
+            </div>
+          ) : (
+            <TimingTower
+              riders={data?.riders ?? []}
+              scaleMs={scaleMs}
+              favorites={favoritesSet}
+              onToggleFavorite={(k) => toggle(setFavorites, k)}
+              nonce={nonce}
+            />
+          )}
+        </div>
       </main>
     </div>
   )
