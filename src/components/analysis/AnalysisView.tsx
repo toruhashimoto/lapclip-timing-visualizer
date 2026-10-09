@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { detectEvents, filterEvents } from '../../analysis/events'
 import type { LoadFn, LoadProgress } from '../../analysis/fetchLapHistory'
 import { DEFAULT_THRESHOLD_MS, groupsByLap } from '../../analysis/groups'
@@ -15,6 +15,12 @@ type Props = {
   onToggleFavorite: (key: string) => void
   enabled: boolean
   disabledReason?: string
+  // The overlay's Auto mode reloads the whole official page, which would kill
+  // an in-flight load. The view turns it off on start and reports loading so
+  // the overlay can hold the reload timer meanwhile.
+  autoReloadOn?: boolean
+  onDisableAutoReload?: () => void
+  onLoadingChange?: (loading: boolean) => void
 }
 
 type Status = 'idle' | 'loading' | 'done' | 'aborted' | 'error'
@@ -22,7 +28,10 @@ const MAX_COLORED = 5
 
 // Analysis tab: loads the per-lap history only on demand, keeps it in memory,
 // and recomputes groups/events locally when the threshold changes.
-export function AnalysisView({ load, favorites, onToggleFavorite, enabled, disabledReason }: Props) {
+export function AnalysisView({
+  load, favorites, onToggleFavorite, enabled, disabledReason,
+  autoReloadOn = false, onDisableAutoReload, onLoadingChange,
+}: Props) {
   const [status, setStatus] = useState<Status>('idle')
   const [progress, setProgress] = useState<LoadProgress | null>(null)
   const [history, setHistory] = useState<LapHistory | null>(null)
@@ -32,11 +41,20 @@ export function AnalysisView({ load, favorites, onToggleFavorite, enabled, disab
   const [majorOnly, setMajorOnly] = useState(true)
   const [highlightLap, setHighlightLap] = useState<number | null>(null)
   const abort = useRef<AbortController | null>(null)
+  const [autoOffNotice, setAutoOffNotice] = useState(false)
+
+  useEffect(() => {
+    onLoadingChange?.(status === 'loading')
+  }, [status, onLoadingChange])
 
   const start = () => {
     abort.current?.abort()
     const ac = new AbortController()
     abort.current = ac
+    if (autoReloadOn && onDisableAutoReload) {
+      onDisableAutoReload()
+      setAutoOffNotice(true)
+    }
     setStatus('loading')
     setError(null)
     setProgress(null)
@@ -108,6 +126,9 @@ export function AnalysisView({ load, favorites, onToggleFavorite, enabled, disab
           </span>
         )}
         {status === 'aborted' && <span className="text-zinc-500">中止しました</span>}
+        {autoOffNotice && (
+          <span className="text-amber-300">分析の読み込みが途中で止まらないよう、自動更新（Auto）をOFFにしました</span>
+        )}
         {status === 'error' && <span className="text-red-400">取得に失敗しました：{error}</span>}
         {history && history.failedBibs.length > 0 && (
           <span className="text-amber-400">取得失敗 {history.failedBibs.length}名</span>

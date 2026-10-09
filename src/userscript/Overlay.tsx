@@ -125,6 +125,8 @@ export function Overlay({ onHide }: { onHide: () => void }) {
   const [autoReload, setAutoReload] = useState<boolean>(() =>
     loadLS<boolean>(LS.autoReload, false),
   )
+  // True while the analysis tab is fetching lap pages (holds the Auto reload).
+  const [analysisLoading, setAnalysisLoading] = useState(false)
   const [intervalSec, setIntervalSec] = useState<number>(() =>
     loadLS<number>(LS.interval, 60),
   )
@@ -243,11 +245,12 @@ export function Overlay({ onHide }: { onHide: () => void }) {
   // Optional auto-reload of the OFFICIAL page (off by default, min 30s). Reloading
   // re-runs the userscript, which re-parses — we never fetch data ourselves.
   useEffect(() => {
-    if (!autoReload) return
+    // Never reload the page while the analysis tab is fetching lap pages.
+    if (!autoReload || analysisLoading) return
     const sec = Math.max(30, intervalSec)
     const id = window.setTimeout(() => location.reload(), sec * 1000)
     return () => window.clearTimeout(id)
-  }, [autoReload, intervalSec])
+  }, [autoReload, intervalSec, analysisLoading])
 
   const favoritesSet = useMemo(() => new Set(favorites), [favorites])
   const favoriteTeamsSet = useMemo(() => new Set(favoriteTeams), [favoriteTeams])
@@ -361,6 +364,9 @@ export function Overlay({ onHide }: { onHide: () => void }) {
               onToggleFavorite={(k) => toggle(setFavorites, k)}
               enabled={analysisEnabled}
               disabledReason="分析は周回レース（先頭が3周以上のマススタート）で利用できます。"
+              autoReloadOn={autoReload}
+              onDisableAutoReload={() => setAutoReload(false)}
+              onLoadingChange={setAnalysisLoading}
             />
           </div>
         )}

@@ -1,7 +1,7 @@
 {
   "name": "lapclip-f1-ui",
   "private": true,
-  "version": "3.0.1",
+  "version": "3.0.2",
   "type": "module",
   "description": "F1-style timing visualizer for LapClip results — individual TT, mass-start road/criterium (with live race-situation), and team TT, auto-detected per stage",
   "scripts": {
